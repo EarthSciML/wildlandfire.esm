@@ -11,13 +11,19 @@ components and drives them end-to-end:
     spatial_discretize (… , GDD)                         — lower grad/|grad psi| via catalog rules
     simulate           (earthsci_toolkit.simulation)     — integrate the ArrayOp ODE system
 
-Two runs:
+Three runs:
   1. standalone LevelSetFireSpread  — eikonal front at R_0 (no coupling);
   2. RothermelFireSpread -> LevelSetFireSpread — the fire-front driven by the
-     Rothermel-computed rate of spread (the fire-behavior chain wired in).
+     Rothermel-computed rate of spread (the fire-behavior chain wired in);
+  3. FuelModelLookup -> RothermelFireSpread -> LevelSetFireSpread — the full
+     fuel chain: a LANDFIRE fuel code is looked up in the Anderson (1982)
+     fuel-model tables (interp.linear over the integer fuel-code axis) to get
+     the fuel-bed properties (sigma, w_0, delta, M_x, h) that Rothermel needs.
 
 Data-driven inputs (LANDFIRE fuel codes, USGS3DEP terrain, ERA5 wind) are held
-at constants here — the full data-loader path needs live data at runtime.
+at constants here — the full data-loader path needs live data at runtime. In
+run 3 the "LANDFIRE" input is a single constant fuel code (1 = Anderson FM1,
+short grass) fed to the real FuelModelLookup component.
 
 Requirements (no live network/data needed):
   - earthsci_toolkit on PYTHONPATH (EarthSciSerialization/packages/earthsci_toolkit/src)
@@ -166,6 +172,50 @@ def run_coupled_rothermel_levelset():
     _run(disc, "coupled Rothermel -> level-set")
 
 
+def run_fuel_lookup_chain():
+    """Real FuelModelLookup -> RothermelFireSpread -> LevelSetFireSpread.
+
+    A constant LANDFIRE fuel code (1 = Anderson FM1, short grass) is looked up
+    in FuelModelLookup's Anderson (1982) fuel-model tables — an `ifelse` guard
+    over an `fn: interp.linear` on the integer fuel-code axis (NOT a registered
+    handler) — to produce the fuel-bed properties (sigma, w_0, delta, M_x, h)
+    that Rothermel consumes. Rothermel's rate of spread then drives the 2-D
+    level-set front, exactly as the Camp Fire coupling specifies."""
+    fml = _load(WILDLAND / "fuel_model_lookup.esm")
+    roth = _load(WILDLAND / "rothermel" / "fire_spread.esm")
+    ls = _load(WILDLAND / "level_set_fire_spread.esm")
+    FM = fml["models"]["FuelModelLookup"]
+    Rm = roth["models"]["RothermelFireSpread"]
+    LSm = ls["models"]["LevelSetFireSpread"]
+    _coarsen(ls["domains"])
+    FM["variables"]["code"]["default"] = 1.0          # Anderson FM1 (short grass)
+    for k, v in {"Mf": 0.08, "U": 3.0, "tan_phi": 0.1}.items():
+        if k in Rm["variables"]:
+            Rm["variables"][k]["default"] = v
+    coupled = {
+        "esm": "0.5.0", "metadata": {"name": "CampFireFuelChain"}, "domains": ls["domains"],
+        "models": {"FuelModelLookup": FM, "RothermelFireSpread": Rm, "LevelSetFireSpread": LSm},
+        "coupling": [
+            *[{"type": "variable_map", "from": f"FuelModelLookup.{a}",
+               "to": f"RothermelFireSpread.{b}", "transform": "param_to_var",
+               "lifting": "pointwise"}
+              for a, b in [("sigma", "sigma"), ("w_0", "w0"), ("delta", "delta"),
+                           ("M_x", "Mx"), ("h", "h")]],
+            *[{"type": "variable_map", "from": f"RothermelFireSpread.{a}",
+               "to": f"LevelSetFireSpread.{b}", "transform": "param_to_var",
+               "lifting": "pointwise"}
+              for a, b in [("R", "R_0"), ("C_coeff", "C_wind"), ("B_coeff", "B_wind"),
+                           ("E_coeff", "E_wind"), ("beta_ratio", "beta_ratio"),
+                           ("phi_s_coeff", "phi_s_coeff")]],
+        ],
+    }
+    flat = et.flatten(et.load(coupled))
+    esm = flattened_to_esm(flat, ls["domains"],
+                           boundary_conditions=LSm["boundary_conditions"])
+    disc = spatial_discretize(esm, _godunov_gdd())
+    _run(disc, "fuel lookup -> Rothermel -> level-set (LANDFIRE code 1 = FM1)")
+
+
 def et_flatten_to_dict(esm: dict, ls: dict) -> dict:
     """Single-component path: flatten (no coupling) then adapt, carrying BCs."""
     flat = et.flatten(et.load(esm))
@@ -181,6 +231,7 @@ def main() -> int:
     print(f"Camp Fire level-set via the ESS Python pipeline (dx={GRID_SPACING} m)\n")
     run_standalone_level_set()
     run_coupled_rothermel_levelset()
+    run_fuel_lookup_chain()
     return 0
 
 
