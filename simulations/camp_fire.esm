@@ -1,0 +1,888 @@
+{
+    "esm": "0.5.0",
+    "metadata": {
+        "name": "CampFireSpread",
+        "description": "Camp Fire (Butte County, CA; ignition 2018-11-08 06:30 PST near Pulga) wildland-fire spread simulation, re-expressed in the EarthSciML Serialization Format. This file is the coupled-system + simulation spec that replaces the legacy WildlandFire.jl script: it wires together the authoritative EarthSciModels components and defines the Camp Fire domain, ignition, and run window.\n\nCoupled components (authoritative definitions in the EarthSciModels repo):\n  - RothermelFireSpread  (components/wildland_fire/rothermel/fire_spread.esm)\n  - LevelSetFireSpread   (components/wildland_fire/level_set_fire_spread.esm) -- the 2-D Hamilton-Jacobi PDE core\n  - FuelModelLookup      (components/wildland_fire/fuel_model_lookup.esm)\n  - TerrainSlope         (components/wildland_fire/terrain_slope.esm)\n  - MidflameWind         (components/wildland_fire/midflame_wind.esm)\n  - FuelConsumption      (components/wildland_fire/level_set/fuel_consumption.esm)\n  - EquilibriumMoistureContent (components/wildland_fire/nfdrs/emc.esm)\n  - OneHourFuelMoisture  (components/wildland_fire/nfdrs/moisture_1h.esm)\n  - LANDFIRE             (components/earthsci_data/landfire.esm)  -- fuel model codes\n  - USGS3DEP             (components/earthsci_data/usgs3dep.esm)  -- elevation + slope\n  - ERA5                 (components/earthsci_data/era5.esm)      -- wind, temperature, humidity\n\nEach model entry here is a coupling-interface stub (the variables that participate in the wiring, with house-style param_to_var routing) following the convention of EarthSciModels couplings/*.esm; the full equations live in the referenced component files and are pulled in by the canonical ESS runner.\n\nSimulation configuration (from the original script): Lambert Conformal Conic projection (lat_1=30, lat_2=60, lat_0=39, lon_0=-97); grid spacing dx=2000 m on a 19x21 cell domain centered between Pulga (ignition) and Paradise; ignition is a signed-distance level set of radius 3000 m about (-121.44, 39.81); run window 2018-11-08T14:30Z to 2018-11-09T06:30Z (16 h). The original integrated the discretized PDE with SSPRK33 at dt=dx/400 s, saving every 600 s. ERA5 met is served on the 3-D pressure-level domain camp_fire_3d and reduced to the surface through the ground_surface interface.",
+        "tags": [
+            "wildland_fire",
+            "camp_fire",
+            "level_set",
+            "rothermel",
+            "coupling",
+            "simulation"
+        ],
+        "created": "2026-06-25T00:00:00Z",
+        "authors": [
+            "WildlandFire.jl contributors",
+            "EarthSciML wildlandfire.esm migration"
+        ],
+        "references": [
+            {
+                "citation": "Rothermel, R. C. (1972). A mathematical model for predicting fire spread in wildland fuels. USDA Forest Service Research Paper INT-115."
+            },
+            {
+                "citation": "Mandel, J., Beezley, J. D., & Kochanski, A. K. (2011). Coupled atmosphere-wildland fire modeling with WRF 3.3 and SFIRE 2011. Geoscientific Model Development, 4(3), 591-610."
+            },
+            {
+                "citation": "Andrews, P. L. (2018). The Rothermel surface fire spread model and associated developments: A comprehensive explanation. RMRS-GTR-371. USDA Forest Service, Rocky Mountain Research Station."
+            }
+        ]
+    },
+    "models": {
+        "LANDFIRE": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full data loader + model in EarthSciModels components/earthsci_data/landfire.esm. Provides the Anderson-13 fuel model code (fuel_model) at the surface; routed to FuelModelLookup.code."
+            },
+            "variables": {
+                "fuel_model": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Anderson-13 fire behavior fuel model code (1-13 burnable; 91-99 non-burnable). OUTPUT -> FuelModelLookup.code."
+                }
+            },
+            "equations": []
+        },
+        "USGS3DEP": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full data loader + model in EarthSciModels components/earthsci_data/usgs3dep.esm. Provides terrain elevation and the runtime finite-difference slope components dzdx, dzdy used by TerrainSlope and the LevelSet PDE."
+            },
+            "variables": {
+                "dzdx": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "East-west terrain slope dz/dx (rise/run). OUTPUT -> TerrainSlope.dzdx and LevelSetFireSpread.dzdx."
+                },
+                "dzdy": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "North-south terrain slope dz/dy (rise/run). OUTPUT -> TerrainSlope.dzdy and LevelSetFireSpread.dzdy."
+                }
+            },
+            "equations": []
+        },
+        "ERA5": {
+            "domain": "camp_fire_3d",
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full data loader + model in EarthSciModels components/earthsci_data/era5.esm (pressure-level variables exposed there as ERA5.pl.{u,v,t,r}). Hourly ECMWF reanalysis met drivers; requires the 3-D pressure-level domain camp_fire_3d. Surface values reach the 0-D fire parameterizations through the ground_surface interface (lev=min)."
+            },
+            "variables": {
+                "u": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Eastward 10 m wind (ERA5.pl.u). OUTPUT -> MidflameWind.u_wind."
+                },
+                "v": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Northward 10 m wind (ERA5.pl.v). OUTPUT -> MidflameWind.v_wind."
+                },
+                "t": {
+                    "type": "parameter",
+                    "units": "K",
+                    "default": 288.0,
+                    "description": "Air temperature (ERA5.pl.t). OUTPUT -> EquilibriumMoistureContent.TEMP."
+                },
+                "r": {
+                    "type": "parameter",
+                    "units": "%",
+                    "default": 30.0,
+                    "description": "Relative humidity in percent (ERA5.pl.r). OUTPUT -> EquilibriumMoistureContent.RH (x0.01 -> fraction)."
+                }
+            },
+            "equations": []
+        },
+        "FuelModelLookup": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/fuel_model_lookup.esm. Maps the Anderson-13 fuel code to the six Rothermel fuel-bed properties."
+            },
+            "variables": {
+                "code": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Anderson-13 fuel code. INPUT <- LANDFIRE.fuel_model."
+                },
+                "sigma": {
+                    "type": "state",
+                    "units": "1/m",
+                    "default": 11483.0,
+                    "description": "Surface-area-to-volume ratio. OUTPUT -> RothermelFireSpread.sigma."
+                },
+                "w_0": {
+                    "type": "state",
+                    "units": "kg/m^2",
+                    "default": 0.166,
+                    "description": "Oven-dry fuel load. OUTPUT -> RothermelFireSpread.w0 and FuelConsumption.w0_initial."
+                },
+                "delta": {
+                    "type": "state",
+                    "units": "m",
+                    "default": 0.305,
+                    "description": "Fuel bed depth. OUTPUT -> RothermelFireSpread.delta."
+                },
+                "M_x": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.12,
+                    "description": "Dead fuel moisture of extinction. OUTPUT -> RothermelFireSpread.Mx."
+                },
+                "h": {
+                    "type": "state",
+                    "units": "J/kg",
+                    "default": 18608000.0,
+                    "description": "Low heat content of dry fuel. OUTPUT -> RothermelFireSpread.h."
+                },
+                "T_f": {
+                    "type": "state",
+                    "units": "s",
+                    "default": 119.0,
+                    "description": "Fuel burn time constant. OUTPUT -> FuelConsumption.T_f."
+                }
+            },
+            "equations": []
+        },
+        "TerrainSlope": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/terrain_slope.esm. Converts elevation gradients to slope steepness tan_phi and upslope aspect."
+            },
+            "variables": {
+                "dzdx": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Elevation gradient east. INPUT <- USGS3DEP.dzdx."
+                },
+                "dzdy": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Elevation gradient north. INPUT <- USGS3DEP.dzdy."
+                },
+                "tan_phi": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Slope steepness sqrt(dzdx^2+dzdy^2). OUTPUT -> RothermelFireSpread.tan_phi."
+                },
+                "slope_aspect": {
+                    "type": "state",
+                    "units": "rad",
+                    "default": 0.0,
+                    "description": "Upslope aspect atan2(dzdy,dzdx). OUTPUT -> MidflameWind.slope_aspect."
+                }
+            },
+            "equations": []
+        },
+        "MidflameWind": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/midflame_wind.esm. Reduces 10 m wind to midflame height and resolves it relative to upslope."
+            },
+            "variables": {
+                "u_wind": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Eastward 10 m wind. INPUT <- ERA5.u."
+                },
+                "v_wind": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Northward 10 m wind. INPUT <- ERA5.v."
+                },
+                "slope_aspect": {
+                    "type": "parameter",
+                    "units": "rad",
+                    "default": 0.0,
+                    "description": "Upslope aspect. INPUT <- TerrainSlope.slope_aspect."
+                },
+                "U": {
+                    "type": "state",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Midflame wind speed. OUTPUT -> RothermelFireSpread.U."
+                },
+                "u_mf_x": {
+                    "type": "state",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Midflame x (east) wind. OUTPUT -> LevelSetFireSpread.u_x."
+                },
+                "u_mf_y": {
+                    "type": "state",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Midflame y (north) wind. OUTPUT -> LevelSetFireSpread.u_y."
+                }
+            },
+            "equations": []
+        },
+        "EquilibriumMoistureContent": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/nfdrs/emc.esm. NFDRS equilibrium moisture content from temperature and relative humidity."
+            },
+            "variables": {
+                "TEMP": {
+                    "type": "parameter",
+                    "units": "K",
+                    "default": 294.26,
+                    "description": "Dry-bulb temperature. INPUT <- ERA5.t."
+                },
+                "RH": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.3,
+                    "description": "Relative humidity fraction (0-1). INPUT <- ERA5.r (x0.01)."
+                },
+                "EMC": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.08,
+                    "description": "Equilibrium moisture content. OUTPUT -> OneHourFuelMoisture.EMCPRM."
+                }
+            },
+            "equations": []
+        },
+        "OneHourFuelMoisture": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/nfdrs/moisture_1h.esm. 1-hour timelag dead fuel moisture; supplies the Rothermel dead fuel moisture Mf."
+            },
+            "variables": {
+                "EMCPRM": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.1,
+                    "description": "Interface equilibrium moisture. INPUT <- EquilibriumMoistureContent.EMC."
+                },
+                "MC1": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.08,
+                    "description": "1-hour dead fuel moisture. OUTPUT -> RothermelFireSpread.Mf."
+                }
+            },
+            "equations": []
+        },
+        "RothermelFireSpread": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/rothermel/fire_spread.esm. Rothermel (1972) surface fire spread: consumes fuel-bed properties, fuel moisture, midflame wind and slope; emits the rate of spread R and the wind/slope coefficients that parameterize the level-set normal spread S(n)."
+            },
+            "variables": {
+                "sigma": {
+                    "type": "parameter",
+                    "units": "1/m",
+                    "default": 11483.0,
+                    "description": "SAV ratio. INPUT <- FuelModelLookup.sigma."
+                },
+                "w0": {
+                    "type": "parameter",
+                    "units": "kg/m^2",
+                    "default": 0.166,
+                    "description": "Oven-dry fuel load. INPUT <- FuelModelLookup.w_0."
+                },
+                "delta": {
+                    "type": "parameter",
+                    "units": "m",
+                    "default": 0.305,
+                    "description": "Fuel bed depth. INPUT <- FuelModelLookup.delta."
+                },
+                "Mx": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.12,
+                    "description": "Moisture of extinction. INPUT <- FuelModelLookup.M_x."
+                },
+                "h": {
+                    "type": "parameter",
+                    "units": "J/kg",
+                    "default": 18608000.0,
+                    "description": "Heat content. INPUT <- FuelModelLookup.h."
+                },
+                "Mf": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.08,
+                    "description": "Dead fuel moisture. INPUT <- OneHourFuelMoisture.MC1."
+                },
+                "U": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Midflame wind speed. INPUT <- MidflameWind.U."
+                },
+                "tan_phi": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Slope steepness. INPUT <- TerrainSlope.tan_phi."
+                },
+                "R": {
+                    "type": "state",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Rate of spread (primary output). OUTPUT -> LevelSetFireSpread.R_0."
+                },
+                "C_coeff": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Wind coefficient C. OUTPUT -> LevelSetFireSpread.C_wind."
+                },
+                "B_coeff": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.5,
+                    "description": "Wind exponent B. OUTPUT -> LevelSetFireSpread.B_wind."
+                },
+                "E_coeff": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.5,
+                    "description": "Packing-ratio exponent E. OUTPUT -> LevelSetFireSpread.E_wind."
+                },
+                "beta_ratio": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Relative packing ratio. OUTPUT -> LevelSetFireSpread.beta_ratio."
+                },
+                "phi_s_coeff": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Slope-factor coefficient. OUTPUT -> LevelSetFireSpread.phi_s_coeff."
+                }
+            },
+            "equations": []
+        },
+        "LevelSetFireSpread": {
+            "domain": "camp_fire_surface",
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full PDE model in EarthSciModels components/wildland_fire/level_set_fire_spread.esm. Hamilton-Jacobi level-set fire-front PDE on the 2-D surface domain camp_fire_surface; the fire front is the zero contour of psi (psi<0 burning, psi>0 unburned). Spread rate is driven by the Rothermel coefficients, midflame wind, and terrain gradients. The ignition front is set by camp_fire_surface.initial_conditions."
+            },
+            "variables": {
+                "psi": {
+                    "type": "state",
+                    "units": "m",
+                    "default": 1.0,
+                    "description": "Level-set field; fire front at psi=0. State of the coupled system. OUTPUT -> FuelConsumption.is_burning (smooth Heaviside)."
+                },
+                "R_0": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 1.0,
+                    "description": "No-wind/no-slope base spread rate. INPUT <- RothermelFireSpread.R."
+                },
+                "C_wind": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Wind coefficient C. INPUT <- RothermelFireSpread.C_coeff."
+                },
+                "B_wind": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.5,
+                    "description": "Wind exponent B. INPUT <- RothermelFireSpread.B_coeff."
+                },
+                "E_wind": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.5,
+                    "description": "Packing-ratio exponent E. INPUT <- RothermelFireSpread.E_coeff."
+                },
+                "beta_ratio": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Relative packing ratio. INPUT <- RothermelFireSpread.beta_ratio."
+                },
+                "phi_s_coeff": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Slope-factor coefficient. INPUT <- RothermelFireSpread.phi_s_coeff."
+                },
+                "u_x": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Midflame x wind. INPUT <- MidflameWind.u_mf_x."
+                },
+                "u_y": {
+                    "type": "parameter",
+                    "units": "m/s",
+                    "default": 0.0,
+                    "description": "Midflame y wind. INPUT <- MidflameWind.u_mf_y."
+                },
+                "dzdx": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Terrain gradient east. INPUT <- USGS3DEP.dzdx."
+                },
+                "dzdy": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Terrain gradient north. INPUT <- USGS3DEP.dzdy."
+                }
+            },
+            "equations": []
+        },
+        "FuelConsumption": {
+            "domain": null,
+            "reference": {
+                "notes": "Migrated from the legacy WildlandFire.jl Camp Fire simulation script. Coupling-interface stub. Full model in EarthSciModels components/wildland_fire/level_set/fuel_consumption.esm. Exponential fuel burn-down (Mandel et al. 2011 Eq. 3) gated by the level-set field: once a cell ignites, fuel decays so the rate of spread returns to zero."
+            },
+            "variables": {
+                "is_burning": {
+                    "type": "parameter",
+                    "units": "1",
+                    "default": 0.0,
+                    "description": "Burning gate in [0,1]. INPUT <- LevelSetFireSpread.psi via 0.5*(1-tanh(psi/eps_h))."
+                },
+                "w0_initial": {
+                    "type": "parameter",
+                    "units": "kg/m^2",
+                    "default": 0.166,
+                    "description": "Initial oven-dry fuel load. INPUT <- FuelModelLookup.w_0."
+                },
+                "T_f": {
+                    "type": "parameter",
+                    "units": "s",
+                    "default": 119.0,
+                    "description": "Fuel burn time constant. INPUT <- FuelModelLookup.T_f."
+                },
+                "F": {
+                    "type": "state",
+                    "units": "1",
+                    "default": 1.0,
+                    "description": "Fuel fraction remaining (1=full, 0=consumed)."
+                }
+            },
+            "equations": []
+        }
+    },
+    "domains": {
+        "camp_fire_surface": {
+            "independent_variable": "t",
+            "temporal": {
+                "start": "2018-11-08T14:30:00Z",
+                "end": "2018-11-09T06:30:00Z",
+                "reference_time": "2018-11-08T14:30:00Z"
+            },
+            "spatial": {
+                "x": {
+                    "min": -2026020.2,
+                    "max": -1990020.2,
+                    "units": "m",
+                    "grid_spacing": 2000.0
+                },
+                "y": {
+                    "min": 374725.0,
+                    "max": 414725.0,
+                    "units": "m",
+                    "grid_spacing": 2000.0
+                }
+            },
+            "spatial_ref": "+proj=lcc +lat_1=30.0 +lat_2=60.0 +lat_0=39.0 +lon_0=-97.0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+            "initial_conditions": {
+                "type": "expression",
+                "values": {
+                    "psi": {
+                        "op": "-",
+                        "args": [
+                            {
+                                "op": "sqrt",
+                                "args": [
+                                    {
+                                        "op": "+",
+                                        "args": [
+                                            {
+                                                "op": "^",
+                                                "args": [
+                                                    {
+                                                        "op": "-",
+                                                        "args": [
+                                                            "x",
+                                                            -2000072.1
+                                                        ]
+                                                    },
+                                                    2
+                                                ]
+                                            },
+                                            {
+                                                "op": "^",
+                                                "args": [
+                                                    {
+                                                        "op": "-",
+                                                        "args": [
+                                                            "y",
+                                                            395036.6
+                                                        ]
+                                                    },
+                                                    2
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            3000.0
+                        ]
+                    }
+                }
+            },
+            "boundary_conditions": [
+                {
+                    "type": "zero_gradient",
+                    "dimensions": [
+                        "x",
+                        "y"
+                    ]
+                }
+            ],
+            "element_type": "Float64"
+        },
+        "camp_fire_3d": {
+            "independent_variable": "t",
+            "temporal": {
+                "start": "2018-11-08T14:30:00Z",
+                "end": "2018-11-09T06:30:00Z",
+                "reference_time": "2018-11-08T14:30:00Z"
+            },
+            "spatial": {
+                "x": {
+                    "min": -2026020.2,
+                    "max": -1990020.2,
+                    "units": "m",
+                    "grid_spacing": 2000.0
+                },
+                "y": {
+                    "min": 374725.0,
+                    "max": 414725.0,
+                    "units": "m",
+                    "grid_spacing": 2000.0
+                },
+                "lev": {
+                    "min": 1.0,
+                    "max": 5.0,
+                    "units": "1",
+                    "grid_spacing": 1.0
+                }
+            },
+            "spatial_ref": "+proj=lcc +lat_1=30.0 +lat_2=60.0 +lat_0=39.0 +lon_0=-97.0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+            "boundary_conditions": [
+                {
+                    "type": "zero_gradient",
+                    "dimensions": [
+                        "x",
+                        "y"
+                    ]
+                },
+                {
+                    "type": "zero_gradient",
+                    "dimensions": [
+                        "lev"
+                    ]
+                }
+            ],
+            "element_type": "Float64"
+        }
+    },
+    "interfaces": {
+        "ground_surface": {
+            "description": "Ground-level interface: extracts surface (lev=min) ERA5 fields from the 3-D meteorology domain onto the 2-D fire surface.",
+            "domains": [
+                "camp_fire_3d",
+                "camp_fire_surface"
+            ],
+            "dimension_mapping": {
+                "shared": {
+                    "camp_fire_3d.x": "camp_fire_surface.x",
+                    "camp_fire_3d.y": "camp_fire_surface.y"
+                },
+                "constraints": {
+                    "camp_fire_3d.lev": {
+                        "value": "min"
+                    }
+                }
+            },
+            "regridding": {
+                "method": "bilinear"
+            }
+        }
+    },
+    "coupling": [
+        {
+            "type": "variable_map",
+            "from": "ERA5.u",
+            "to": "MidflameWind.u_wind",
+            "transform": "param_to_var",
+            "interface": "ground_surface",
+            "lifting": "pointwise",
+            "description": "Surface eastward wind drives midflame wind."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5.v",
+            "to": "MidflameWind.v_wind",
+            "transform": "param_to_var",
+            "interface": "ground_surface",
+            "lifting": "pointwise",
+            "description": "Surface northward wind drives midflame wind."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5.t",
+            "to": "EquilibriumMoistureContent.TEMP",
+            "transform": "param_to_var",
+            "interface": "ground_surface",
+            "lifting": "pointwise",
+            "description": "Surface air temperature drives equilibrium moisture content."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5.r",
+            "to": "EquilibriumMoistureContent.RH",
+            "transform": "param_to_var",
+            "factor": 0.01,
+            "interface": "ground_surface",
+            "lifting": "pointwise",
+            "description": "Surface relative humidity (percent) drives EMC; factor 0.01 converts %% to fraction."
+        },
+        {
+            "type": "variable_map",
+            "from": "LANDFIRE.fuel_model",
+            "to": "FuelModelLookup.code",
+            "transform": "param_to_var",
+            "description": "LANDFIRE fuel model code selects the Anderson-13 fuel-bed properties."
+        },
+        {
+            "type": "variable_map",
+            "from": "USGS3DEP.dzdx",
+            "to": "TerrainSlope.dzdx",
+            "transform": "param_to_var",
+            "description": "DEM east-west slope feeds terrain-slope computation."
+        },
+        {
+            "type": "variable_map",
+            "from": "USGS3DEP.dzdy",
+            "to": "TerrainSlope.dzdy",
+            "transform": "param_to_var",
+            "description": "DEM north-south slope feeds terrain-slope computation."
+        },
+        {
+            "type": "variable_map",
+            "from": "FuelModelLookup.sigma",
+            "to": "RothermelFireSpread.sigma",
+            "transform": "param_to_var",
+            "description": "Fuel SAV ratio."
+        },
+        {
+            "type": "variable_map",
+            "from": "FuelModelLookup.w_0",
+            "to": "RothermelFireSpread.w0",
+            "transform": "param_to_var",
+            "description": "Oven-dry fuel load."
+        },
+        {
+            "type": "variable_map",
+            "from": "FuelModelLookup.delta",
+            "to": "RothermelFireSpread.delta",
+            "transform": "param_to_var",
+            "description": "Fuel bed depth."
+        },
+        {
+            "type": "variable_map",
+            "from": "FuelModelLookup.M_x",
+            "to": "RothermelFireSpread.Mx",
+            "transform": "param_to_var",
+            "description": "Dead fuel moisture of extinction."
+        },
+        {
+            "type": "variable_map",
+            "from": "FuelModelLookup.h",
+            "to": "RothermelFireSpread.h",
+            "transform": "param_to_var",
+            "description": "Low heat content of dry fuel."
+        },
+        {
+            "type": "variable_map",
+            "from": "TerrainSlope.tan_phi",
+            "to": "RothermelFireSpread.tan_phi",
+            "transform": "param_to_var",
+            "description": "Slope steepness drives the Rothermel slope factor."
+        },
+        {
+            "type": "variable_map",
+            "from": "TerrainSlope.slope_aspect",
+            "to": "MidflameWind.slope_aspect",
+            "transform": "param_to_var",
+            "description": "Upslope aspect orients the midflame wind relative to slope."
+        },
+        {
+            "type": "variable_map",
+            "from": "MidflameWind.U",
+            "to": "RothermelFireSpread.U",
+            "transform": "param_to_var",
+            "description": "Midflame wind speed drives the Rothermel wind factor."
+        },
+        {
+            "type": "variable_map",
+            "from": "EquilibriumMoistureContent.EMC",
+            "to": "OneHourFuelMoisture.EMCPRM",
+            "transform": "param_to_var",
+            "description": "Equilibrium moisture feeds the 1-hour fuel moisture."
+        },
+        {
+            "type": "variable_map",
+            "from": "OneHourFuelMoisture.MC1",
+            "to": "RothermelFireSpread.Mf",
+            "transform": "param_to_var",
+            "description": "1-hour dead fuel moisture is the Rothermel fuel moisture."
+        },
+        {
+            "type": "variable_map",
+            "from": "RothermelFireSpread.R",
+            "to": "LevelSetFireSpread.R_0",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Rothermel rate of spread is the level-set base spread rate."
+        },
+        {
+            "type": "variable_map",
+            "from": "RothermelFireSpread.C_coeff",
+            "to": "LevelSetFireSpread.C_wind",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Rothermel wind coefficient C."
+        },
+        {
+            "type": "variable_map",
+            "from": "RothermelFireSpread.B_coeff",
+            "to": "LevelSetFireSpread.B_wind",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Rothermel wind exponent B."
+        },
+        {
+            "type": "variable_map",
+            "from": "RothermelFireSpread.E_coeff",
+            "to": "LevelSetFireSpread.E_wind",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Rothermel packing-ratio exponent E."
+        },
+        {
+            "type": "variable_map",
+            "from": "RothermelFireSpread.beta_ratio",
+            "to": "LevelSetFireSpread.beta_ratio",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Rothermel relative packing ratio."
+        },
+        {
+            "type": "variable_map",
+            "from": "RothermelFireSpread.phi_s_coeff",
+            "to": "LevelSetFireSpread.phi_s_coeff",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Rothermel slope-factor coefficient."
+        },
+        {
+            "type": "variable_map",
+            "from": "MidflameWind.u_mf_x",
+            "to": "LevelSetFireSpread.u_x",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Midflame eastward wind drives directional spread."
+        },
+        {
+            "type": "variable_map",
+            "from": "MidflameWind.u_mf_y",
+            "to": "LevelSetFireSpread.u_y",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Midflame northward wind drives directional spread."
+        },
+        {
+            "type": "variable_map",
+            "from": "USGS3DEP.dzdx",
+            "to": "LevelSetFireSpread.dzdx",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "DEM east-west slope drives directional spread."
+        },
+        {
+            "type": "variable_map",
+            "from": "USGS3DEP.dzdy",
+            "to": "LevelSetFireSpread.dzdy",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "DEM north-south slope drives directional spread."
+        },
+        {
+            "type": "couple",
+            "systems": [
+                "LevelSetFireSpread",
+                "FuelConsumption"
+            ],
+            "connector": {
+                "equations": [
+                    {
+                        "from": "LevelSetFireSpread.psi",
+                        "to": "FuelConsumption.is_burning",
+                        "transform": "replacement",
+                        "expression": {
+                            "op": "/",
+                            "args": [
+                                1.0,
+                                {
+                                    "op": "+",
+                                    "args": [
+                                        1.0,
+                                        {
+                                            "op": "exp",
+                                            "args": [
+                                                {
+                                                    "op": "*",
+                                                    "args": [
+                                                        2.0,
+                                                        {
+                                                            "op": "/",
+                                                            "args": [
+                                                                "LevelSetFireSpread.psi",
+                                                                2000.0
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "lifting": "pointwise",
+            "description": "The level-set field gates fuel consumption: cells with psi<0 (burning) consume fuel via a smooth Heaviside 0.5*(1-tanh(psi/eps_h))."
+        }
+    ]
+}
