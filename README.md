@@ -96,15 +96,42 @@ correct physics — e.g. for an Anderson FM1 grass bed under 3.4 m/s midflame wi
 and a 22 % slope, Rothermel gives a rate of spread `R ≈ 1.08 m/s (65 m/min)`;
 `FuelConsumption` burns a cell down to ~0 fuel over the run window.
 
-**2-D level-set PDE core — needs the Julia backend.** `LevelSetFireSpread` is a
+**2-D level-set PDE core — now runs in Python too.** `LevelSetFireSpread` is a
 spatial Hamilton–Jacobi PDE (`system_kind: "pde"`, independent variables
-`t, x, y`). The Python `simulate()` backend **deliberately rejects** systems with
-spatial independent variables (`UnsupportedDimensionalityError`, per ESS spec
-§4.7.6.12 — "ODE backends MUST reject PDE inputs") and points to the
-PDE-capable Julia runner (`EarthSciModels.load_esm` → ModelingToolkit +
-MethodOfLines). The toolkit's `discretize.py` is a DAE/algebraic-elimination
-pass, **not** a spatial method-of-lines discretizer (its docstring defers the
-"PDE-op scan" to future work), so it does not bridge this gap. Running the full
-coupled Camp Fire simulation end-to-end therefore requires Julia (plus live
-LANDFIRE / USGS 3DEP / ERA5 data access) — the same toolchain the original
-script targeted.
+`t, x, y`). It runs end-to-end through the EarthSciSerialization Python pipeline:
+
+```
+flatten → flattened_to_esm → spatial_discretize(GDD) → simulate
+```
+
+where `spatial_discretize` (the generic, GDD-driven method-of-lines pass) lowers
+the spatial operators to ArrayOp stencils via the EarthSciDiscretizations catalog
+rules — including the **Godunov upwind `|∇ψ|`** rule needed for a stable level-set
+front. No new AST op or spec change; the scheme is selected by the GDD.
+
+Run it with [`simulations/run_camp_fire.py`](simulations/run_camp_fire.py), the
+runnable successor to the legacy Julia script:
+
+```bash
+PYTHONPATH=…/EarthSciSerialization/packages/earthsci_toolkit/src \
+EARTHSCIMODELS=…/EarthSciModels \
+python simulations/run_camp_fire.py
+```
+
+It drives the **real** EarthSciModels components and reports the fire-front
+radius over time, for two configurations:
+
+- *standalone* `LevelSetFireSpread` — an eikonal front advancing at `R_0` (≈1 m/s);
+- *coupled* `RothermelFireSpread → LevelSetFireSpread` — the front driven by the
+  Rothermel-computed rate of spread (≈0.71 m/s for Anderson FM1 grass under 3 m/s
+  midflame wind and a mild slope), confirming the fire-behavior chain is wired in.
+
+Data-driven inputs (LANDFIRE fuel codes, USGS 3DEP terrain, ERA5 wind) are held
+at constants in the runner; the **full** data-loader path still needs live
+LANDFIRE / USGS 3DEP / ERA5 data at runtime (and the Julia toolchain remains the
+reference for high-resolution / curvilinear runs).
+
+This Python PDE capability was added across EarthSciSerialization (the rule
+engine, `spatial_discretize`, coupling-flatten, canonicalization, and the single
+`discretize(esm, gdd=…)` entry) and EarthSciDiscretizations (the Godunov catalog
+rule).
