@@ -119,12 +119,19 @@ python simulations/run_camp_fire.py
 ```
 
 It drives the **real** EarthSciModels components and reports the fire-front
-radius over time, for two configurations:
+radius over time, for three configurations:
 
 - *standalone* `LevelSetFireSpread` — an eikonal front advancing at `R_0` (≈1 m/s);
 - *coupled* `RothermelFireSpread → LevelSetFireSpread` — the front driven by the
   Rothermel-computed rate of spread (≈0.71 m/s for Anderson FM1 grass under 3 m/s
-  midflame wind and a mild slope), confirming the fire-behavior chain is wired in.
+  midflame wind and a mild slope), confirming the fire-behavior chain is wired in;
+- *full fuel chain* `FuelModelLookup → RothermelFireSpread → LevelSetFireSpread` —
+  a LANDFIRE fuel code (1 = Anderson FM1) is looked up in `FuelModelLookup`'s
+  Anderson (1982) tables (an `ifelse` over `fn: interp.linear` on the integer
+  fuel-code axis — *not* a registered handler) to produce the fuel-bed
+  properties (σ, w₀, δ, Mx, h) that Rothermel needs. The looked-up bed
+  reproduces the coupled run's front exactly, confirming the real fuel lookup
+  drives the spread.
 
 Data-driven inputs (LANDFIRE fuel codes, USGS 3DEP terrain, ERA5 wind) are held
 at constants in the runner; the **full** data-loader path still needs live
