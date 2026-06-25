@@ -111,37 +111,37 @@
                     "description": "Anderson-13 fuel code. INPUT <- LANDFIRE.fuel_model."
                 },
                 "sigma": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1/m",
                     "default": 11483.0,
                     "description": "Surface-area-to-volume ratio. OUTPUT -> RothermelFireSpread.sigma."
                 },
                 "w_0": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "kg/m^2",
                     "default": 0.166,
                     "description": "Oven-dry fuel load. OUTPUT -> RothermelFireSpread.w0 and FuelConsumption.w0_initial."
                 },
                 "delta": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "m",
                     "default": 0.305,
                     "description": "Fuel bed depth. OUTPUT -> RothermelFireSpread.delta."
                 },
                 "M_x": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.12,
                     "description": "Dead fuel moisture of extinction. OUTPUT -> RothermelFireSpread.Mx."
                 },
                 "h": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "J/kg",
                     "default": 18608000.0,
                     "description": "Low heat content of dry fuel. OUTPUT -> RothermelFireSpread.h."
                 },
                 "T_f": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "s",
                     "default": 119.0,
                     "description": "Fuel burn time constant. OUTPUT -> FuelConsumption.T_f."
@@ -168,13 +168,13 @@
                     "description": "Elevation gradient north. INPUT <- USGS3DEP.dzdy."
                 },
                 "tan_phi": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.0,
                     "description": "Slope steepness sqrt(dzdx^2+dzdy^2). OUTPUT -> RothermelFireSpread.tan_phi."
                 },
                 "slope_aspect": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "rad",
                     "default": 0.0,
                     "description": "Upslope aspect atan2(dzdy,dzdx). OUTPUT -> MidflameWind.slope_aspect."
@@ -207,19 +207,19 @@
                     "description": "Upslope aspect. INPUT <- TerrainSlope.slope_aspect."
                 },
                 "U": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "m/s",
                     "default": 0.0,
                     "description": "Midflame wind speed. OUTPUT -> RothermelFireSpread.U."
                 },
                 "u_mf_x": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "m/s",
                     "default": 0.0,
                     "description": "Midflame x (east) wind. OUTPUT -> LevelSetFireSpread.u_x."
                 },
                 "u_mf_y": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "m/s",
                     "default": 0.0,
                     "description": "Midflame y (north) wind. OUTPUT -> LevelSetFireSpread.u_y."
@@ -246,7 +246,7 @@
                     "description": "Relative humidity fraction (0-1). INPUT <- ERA5.r (x0.01)."
                 },
                 "EMC": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.08,
                     "description": "Equilibrium moisture content. OUTPUT -> OneHourFuelMoisture.EMCPRM."
@@ -267,7 +267,7 @@
                     "description": "Interface equilibrium moisture. INPUT <- EquilibriumMoistureContent.EMC."
                 },
                 "MC1": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.08,
                     "description": "1-hour dead fuel moisture. OUTPUT -> RothermelFireSpread.Mf."
@@ -330,37 +330,37 @@
                     "description": "Slope steepness. INPUT <- TerrainSlope.tan_phi."
                 },
                 "R": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "m/s",
                     "default": 0.0,
                     "description": "Rate of spread (primary output). OUTPUT -> LevelSetFireSpread.R_0."
                 },
                 "C_coeff": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 1.0,
                     "description": "Wind coefficient C. OUTPUT -> LevelSetFireSpread.C_wind."
                 },
                 "B_coeff": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.5,
                     "description": "Wind exponent B. OUTPUT -> LevelSetFireSpread.B_wind."
                 },
                 "E_coeff": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.5,
                     "description": "Packing-ratio exponent E. OUTPUT -> LevelSetFireSpread.E_wind."
                 },
                 "beta_ratio": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 1.0,
                     "description": "Relative packing ratio. OUTPUT -> LevelSetFireSpread.beta_ratio."
                 },
                 "phi_s_coeff": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 0.0,
                     "description": "Slope-factor coefficient. OUTPUT -> LevelSetFireSpread.phi_s_coeff."
@@ -375,7 +375,7 @@
             },
             "variables": {
                 "psi": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "m",
                     "default": 1.0,
                     "description": "Level-set field; fire front at psi=0. State of the coupled system. OUTPUT -> FuelConsumption.is_burning (smooth Heaviside)."
@@ -468,7 +468,7 @@
                     "description": "Fuel burn time constant. INPUT <- FuelModelLookup.T_f."
                 },
                 "F": {
-                    "type": "parameter",
+                    "type": "state",
                     "units": "1",
                     "default": 1.0,
                     "description": "Fuel fraction remaining (1=full, 0=consumed)."
@@ -586,10 +586,6 @@
                 }
             },
             "spatial_ref": "+proj=lcc +lat_1=30.0 +lat_2=60.0 +lat_0=39.0 +lon_0=-97.0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
-            "initial_conditions": {
-                "type": "constant",
-                "value": 0.0
-            },
             "boundary_conditions": [
                 {
                     "type": "zero_gradient",

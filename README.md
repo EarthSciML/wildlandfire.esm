@@ -83,7 +83,28 @@ USGS3DEP.dzdx/dzdy, MidflameWind.u_mf ───────►  LevelSetFireSpre
   Heaviside `0.5·(1 − tanh(ψ/εₕ))` is written in its algebraically identical
   `exp` form `1 / (1 + exp(2ψ/εₕ))`, with `εₕ = dx`.
 
-## Validation
+## Validation & running
 
 `simulations/camp_fire.esm` validates against `esm-schema.json` and all of its
 coupling / domain / interface references resolve.
+
+**0-D fire-behavior chain — verified runnable.** The point parameterizations
+(`FuelModelLookup`, `TerrainSlope`, `MidflameWind`, `EquilibriumMoistureContent`,
+`OneHourFuelMoisture`, `RothermelFireSpread`, `FuelConsumption`) run through the
+canonical Python ESS runner (`earthsci_toolkit.simulation.simulate`) and produce
+correct physics — e.g. for an Anderson FM1 grass bed under 3.4 m/s midflame wind
+and a 22 % slope, Rothermel gives a rate of spread `R ≈ 1.08 m/s (65 m/min)`;
+`FuelConsumption` burns a cell down to ~0 fuel over the run window.
+
+**2-D level-set PDE core — needs the Julia backend.** `LevelSetFireSpread` is a
+spatial Hamilton–Jacobi PDE (`system_kind: "pde"`, independent variables
+`t, x, y`). The Python `simulate()` backend **deliberately rejects** systems with
+spatial independent variables (`UnsupportedDimensionalityError`, per ESS spec
+§4.7.6.12 — "ODE backends MUST reject PDE inputs") and points to the
+PDE-capable Julia runner (`EarthSciModels.load_esm` → ModelingToolkit +
+MethodOfLines). The toolkit's `discretize.py` is a DAE/algebraic-elimination
+pass, **not** a spatial method-of-lines discretizer (its docstring defers the
+"PDE-op scan" to future work), so it does not bridge this gap. Running the full
+coupled Camp Fire simulation end-to-end therefore requires Julia (plus live
+LANDFIRE / USGS 3DEP / ERA5 data access) — the same toolchain the original
+script targeted.
