@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wildlandfire-esm"
+version = "0.1.0"
+description = "Wildland-fire .esm simulations and the Camp Fire validation harness"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+# The simulation runner (run_camp_fire.py) drives the EarthSciSerialization
+# Python toolkit, which needs scipy; reading an observed reference from disk
+# needs netCDF4. The core validation metrics need neither.
+run = ["scipy>=1.10"]
+netcdf = ["netCDF4>=1.6"]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["simulations", "simulations.validation"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

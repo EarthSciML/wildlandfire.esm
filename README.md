@@ -142,3 +142,49 @@ This Python PDE capability was added across EarthSciSerialization (the rule
 engine, `spatial_discretize`, coupling-flatten, canonicalization, and the single
 `discretize(esm, gdd=…)` entry) and EarthSciDiscretizations (the Godunov catalog
 rule).
+
+## Validating against the observed fire (`simulations/validation/`)
+
+`run_camp_fire.py` produces the *simulated* fire progression — a signed
+level-set field `psi(t, y, x)` whose `psi ≤ 0` region is the burned area and
+whose `psi = 0` contour is the fire front. The
+[`simulations.validation`](simulations/validation) harness scores that
+progression against the **observed** 2018 Camp Fire and emits a report. It is a
+*soft oracle*: observed-versus-simulated wildfire agreement is a research
+comparison (the model "never fully ran" end-to-end), so its thresholds colour
+each metric `OK`/`WARN` to guide the eye rather than asserting a bit-exact pass —
+the numbers themselves are always reported verbatim.
+
+Three metric families (campaign bead **E2**):
+
+| Family | Simulated quantity | Observed reference (campaign **E1**) | Headline metrics |
+|---|---|---|---|
+| **Burned-area agreement** | final `psi ≤ 0` footprint | MTBS severity + last perimeter | area ratio, IoU, Dice, precision / recall |
+| **Perimeter over time / spread rate** | `psi ≤ 0` area at each observed time | NIFC / GeoMAC daily perimeters | area-vs-time RMSE, mean spread rate, per-time IoU |
+| **Ignition match** | burned-region centroid + window start | VIIRS / MODIS first detection | ignition distance (km), time offset (h) |
+
+Try it on built-in synthetic data (an expanding-disk fire — no external files):
+
+```bash
+python -m simulations.validation --demo --markdown report.md --json report.json
+```
+
+Wire a real run + observed reference (the end-to-end **E3** path):
+
+```python
+from simulations.validation import LevelSetRun, ObservedReference, validate
+
+# `result` is the earthsci_toolkit simulate() output from run_camp_fire.py
+run = LevelSetRun.from_simulate_result(result, dx=2000.0, t0=window_start)
+ref = ObservedReference.from_netcdf("camp_fire_observed.nc")  # rasterised E1 loaders
+validate(run, ref).write(json_path="report.json", markdown_path="report.md")
+```
+
+The observed reference is whatever the E1 observed-fire loaders rasterise to a
+`burned_fraction(time, y, x)` grid (perimeters / MTBS / active-fire are
+rasterised offline so each reads as an ordinary `kind:grid` loader). The harness
+nearest-neighbour-resamples that grid onto the run grid, so the two need not
+share a resolution. The data model is pure numpy; `netCDF4` is imported only when
+reading a reference from disk.
+
+Run the harness tests with `pytest` (from the repo root).
