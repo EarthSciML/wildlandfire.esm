@@ -232,3 +232,68 @@ share a resolution. The data model is pure numpy; `netCDF4` is imported only whe
 reading a reference from disk.
 
 Run the harness tests with `pytest` (from the repo root).
+
+## End-to-end DRAIN run (`simulations/run_camp_fire_e2e.py`, campaign bead **E3**)
+
+The campaign capstone: one driver that assembles the **full 11-component** model
+over its **real** domain/window, drives the fire physics with the **data
+loaders**, integrates a fire progression, and scores it with the **E2** harness —
+emitting a validation report.
+
+```bash
+PYTHONPATH=.../earthsci_toolkit/src EARTHSCIMODELS=.../EarthSciModels \
+    python simulations/run_camp_fire_e2e.py --outdir campfire_e2e_out
+# writes camp_fire_run.npz + camp_fire_validation.{md,json}; --observed REF.nc
+# scores against a real rasterised E1 reference instead of the documented-facts one.
+```
+
+**Scope — what runs in Python, what is deferred.** Per the campaign decision, the
+Python end-to-end path is **0-D fire-behavior chains + assembly + the
+loader/regrid path**; the full 2-D level-set Hamilton–Jacobi PDE *core* is the
+deferred **Julia** campaign (Python `simulate()` raises
+`UnsupportedDimensionalityError` on a multi-D spatial system). The driver's five
+stages:
+
+1. **Assemble** — `et.load` resolves the 11 `{ref}` components (by-name model-ref
+   resolver) and `et.flatten` couples them into one non-empty system over the real
+   Camp Fire domain (19×21 @ 2 km, LCC) and window (62 equations, 40 states, 20
+   loader fields, all 11 source systems).
+2. **Loader/regrid path** — `build_target_grid` from the flattened domain, then
+   each data source (LANDFIRE fuel, USGS 3DEP slope, ERA5 wind/T/RH) is regridded
+   onto the real grid (reproject + bspline + `lev=min`). Cached real data is used
+   when `EARTHSCIDATADIR` holds it; otherwise physically representative Camp Fire
+   fields stand in (the live pull is a documented blocker — below).
+3. **0-D fire-behavior chain** — per cell, the *real* components
+   (`FuelModelLookup → TerrainSlope → MidflameWind → EMC → 1-h moisture →
+   Rothermel`) run on the regridded inputs to give the rate of spread `R(x, y)`.
+   This is the loader-driven physics integration.
+4. **Fire progression** — a kinematic anisotropic minimum-travel-time front
+   (Dijkstra with the wind-driven elliptical fire shape; Anderson 1983 +
+   Finney 2002 MTT) from the Pulga ignition gives `psi(t, y, x)` — a post-process
+   of the 0-D `R` field, *not* the deferred PDE core.
+5. **E2 validation** — the progression is scored against the observed reference
+   and a Markdown + JSON report is written.
+
+**Result (representative run).** The simulated front spreads from the documented
+Pulga ignition (ignition distance ≈ 0.3 km) SW toward Paradise, reaching ~30 km
+and ~240 km² over the 16 h window — consistent with the documented Camp Fire
+first-day extent (~280 km², ~25–30 km run), with heading rates up to ~300 m/min.
+All physical-sanity checks pass; the soft-oracle overlap metrics are moderate
+against the coarse documented-facts reference (a `WARN` is advisory, not a
+failure).
+
+**Blockers / deferrals** (the driver prints these):
+
+1. **Full 2-D level-set PDE core → Julia.** Python `simulate()` rejects the
+   multi-D spatial system, so the coupled Hamilton–Jacobi front (curvature +
+   fuel-consumption feedback) is integrated in Julia; Python runs the chains +
+   assembly + loader/regrid + the kinematic MTT progression.
+2. **Live ERA5 / LANDFIRE / USGS 3DEP → not acquired (user-gated).** The loader
+   seam (cache, regrid, injection) is exercised on the real grid with
+   representative fields: `EARTHSCIDATADIR` is empty, `cdsapi` is not installed,
+   and the default loader URLs are placeholders. Populating the cache over the run
+   window is data-engineering work (ERA5 needs a CDS key).
+3. **Observed reference (E1) → not acquired.** The MTBS/NIFC/VIIRS loaders landed,
+   but the rasterised Camp Fire reference needs a FIRMS key + perimeter download;
+   until then the harness scores against a documented-facts stand-in. Pass
+   `--observed REF.nc` to use the real rasterisation.
