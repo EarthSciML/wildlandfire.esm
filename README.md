@@ -110,13 +110,33 @@ rules — including the **Godunov upwind `|∇ψ|`** rule needed for a stable le
 front. No new AST op or spec change; the scheme is selected by the GDD.
 
 Run it with [`simulations/run_camp_fire.py`](simulations/run_camp_fire.py), the
-runnable successor to the legacy Julia script:
+runnable successor to the legacy Julia script.
+
+**Required EarthSciSerialization commit.** The runner imports the
+`spatial_discretize` pipeline, and the live data-loader path (below) reads
+through the `EARTHSCIDATADIR` cache seam — both are present as of
+EarthSciSerialization commit
+[`86b09d86`](https://github.com/EarthSciML/EarthSciSerialization/commit/86b09d86ec894bfb6661893b3d28af04c2e56df4)
+(`feat(python): EARTHSCIDATADIR content-addressed cached opener/fetcher for the
+loader seam`, on `main`). Check the toolkit out at that commit so the run is
+reproducible:
 
 ```bash
-PYTHONPATH=…/EarthSciSerialization/packages/earthsci_toolkit/src \
-EARTHSCIMODELS=…/EarthSciModels \
+# two checkouts: the pinned ESS toolkit and the EarthSciModels components
+EARTHSCISERIALIZATION=…/EarthSciSerialization
+EARTHSCIMODELS=…/EarthSciModels
+git -C "$EARTHSCISERIALIZATION" checkout 86b09d86ec894bfb6661893b3d28af04c2e56df4
+
+PYTHONPATH="$EARTHSCISERIALIZATION/packages/earthsci_toolkit/src" \
+EARTHSCIMODELS="$EARTHSCIMODELS" \
 python simulations/run_camp_fire.py
 ```
+
+`EARTHSCIMODELS` defaults to a sibling `../EarthSciModels` checkout when unset;
+`PYTHONPATH` must point at the pinned toolkit's `src`. The runner itself needs
+no live network or data — the LANDFIRE / USGS 3DEP / ERA5 inputs are held at
+constants (the full live path is the [data cache](#data-cache-for-the-live-data-loader-path-earthscidatadir)
+below).
 
 It drives the **real** EarthSciModels components and reports the fire-front
 radius over time, for three configurations:
@@ -137,6 +157,30 @@ Data-driven inputs (LANDFIRE fuel codes, USGS 3DEP terrain, ERA5 wind) are held
 at constants in the runner; the **full** data-loader path still needs live
 LANDFIRE / USGS 3DEP / ERA5 data at runtime (and the Julia toolchain remains the
 reference for high-resolution / curvilinear runs).
+
+### Data cache for the live data-loader path (`EARTHSCIDATADIR`)
+
+That live data-loader path reads its inputs through EarthSciSerialization's
+content-addressed disk cache (added in the pinned commit). A populated cache
+lets the loaders run offline and keeps large NetCDF / GeoTIFF pulls off
+inode-quota'd home filesystems. It is configured entirely by environment:
+
+| Env var | Effect |
+|---|---|
+| `EARTHSCIDATADIR` | Cache root. Resolution order is explicit `data_dir=` arg → `$EARTHSCIDATADIR` → a temp dir (`$TMPDIR/earthsci-cache`). Point it at scratch — e.g. `EARTHSCIDATADIR=/scratch.local/$USER/earthsci-cache` — for Camp Fire-sized data. |
+| `EARTHSCI_OFFLINE` | Set truthy (`1`/`true`/`yes`/`on`) to force cache-only mode: a miss raises `CacheMiss` instead of hitting the network. Leave unset to fetch-and-cache on miss. |
+
+Cache files are keyed on `sha256(resolved_url)` (laid out
+`<root>/<aa>/<sha256><suffix>`), so a cache populated once is reused across
+mirrors and runs. The mechanism wraps the loaders' existing dependency-injection
+seam — `GridLoader` / `StaticLoader` take `opener(url) -> Dataset`, `PointsLoader`
+takes `fetcher(url) -> bytes` — via `earthsci_toolkit.cached_opener` /
+`cached_fetcher`; wiring is additive, so loaders default to the uncached path
+unless a caller opts in.
+
+Acquiring the Camp Fire window into the cache (the real ERA5 / LANDFIRE / USGS
+3DEP pulls over the run window) is wf data-engineering work tracked separately;
+**ERA5 additionally needs a Copernicus CDS key in `~/.cdsapirc`**.
 
 This Python PDE capability was added across EarthSciSerialization (the rule
 engine, `spatial_discretize`, coupling-flatten, canonicalization, and the single
