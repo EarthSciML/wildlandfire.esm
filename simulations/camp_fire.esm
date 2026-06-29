@@ -2,7 +2,7 @@
     "esm": "0.5.0",
     "metadata": {
         "name": "CampFireSpread",
-        "description": "Camp Fire (Butte County, CA; ignition 2018-11-08 06:30 PST near Pulga) wildland-fire spread simulation, re-expressed in the EarthSciML Serialization Format. This file is the coupled-system + simulation spec that replaces the legacy WildlandFire.jl script: it wires together the authoritative EarthSciModels components and defines the Camp Fire domain, ignition, and run window.\n\nCoupled components (authoritative definitions in the EarthSciModels repo):\n  - RothermelFireSpread  (components/wildland_fire/rothermel/fire_spread.esm)\n  - LevelSetFireSpread   (components/wildland_fire/level_set_fire_spread.esm) -- the 2-D Hamilton-Jacobi PDE core\n  - FuelModelLookup      (components/wildland_fire/fuel_model_lookup.esm)\n  - TerrainSlope         (components/wildland_fire/terrain_slope.esm)\n  - MidflameWind         (components/wildland_fire/midflame_wind.esm)\n  - FuelConsumption      (components/wildland_fire/level_set/fuel_consumption.esm)\n  - EquilibriumMoistureContent (components/wildland_fire/nfdrs/emc.esm)\n  - OneHourFuelMoisture  (components/wildland_fire/nfdrs/moisture_1h.esm)\n  - LANDFIRE             (components/earthsci_data/landfire.esm)  -- fuel model codes\n  - USGS3DEP             (components/earthsci_data/usgs3dep.esm)  -- elevation + slope\n  - ERA5                 (components/earthsci_data/era5.esm)      -- wind, temperature, humidity\n\nEach model entry here is a coupling-interface stub (the variables that participate in the wiring, with house-style param_to_var routing) following the convention of EarthSciModels couplings/*.esm; the full equations live in the referenced component files and are pulled in by the canonical ESS runner.\n\nSimulation configuration (from the original script): Lambert Conformal Conic projection (lat_1=30, lat_2=60, lat_0=39, lon_0=-97); grid spacing dx=2000 m on a 19x21 cell domain centered between Pulga (ignition) and Paradise; ignition is a signed-distance level set of radius 3000 m about (-121.44, 39.81); run window 2018-11-08T14:30Z to 2018-11-09T06:30Z (16 h). The original integrated the discretized PDE with SSPRK33 at dt=dx/400 s, saving every 600 s. ERA5 met is served on the 3-D pressure-level domain camp_fire_3d and reduced to the surface through the ground_surface interface.",
+        "description": "Camp Fire (Butte County, CA; ignition 2018-11-08 06:30 PST near Pulga) wildland-fire spread simulation, re-expressed in the EarthSciML Serialization Format. This file is the coupled-system + simulation spec that replaces the legacy WildlandFire.jl script: it wires together the authoritative EarthSciModels components and defines the Camp Fire domain, ignition, and run window.\n\nCoupled components (authoritative definitions in the EarthSciModels repo):\n  - RothermelFireSpread  (components/wildland_fire/rothermel/fire_spread.esm)\n  - LevelSetFireSpread   (components/wildland_fire/level_set_fire_spread.esm) -- the 2-D Hamilton-Jacobi PDE core\n  - FuelModelLookup      (components/wildland_fire/fuel_model_lookup.esm)\n  - TerrainSlope         (components/wildland_fire/terrain_slope.esm)\n  - MidflameWind         (components/wildland_fire/midflame_wind.esm)\n  - FuelConsumption      (components/wildland_fire/level_set/fuel_consumption.esm)\n  - EquilibriumMoistureContent (components/wildland_fire/nfdrs/emc.esm)\n  - OneHourFuelMoisture  (components/wildland_fire/nfdrs/moisture_1h.esm)\n  - LANDFIRE             (components/earthsci_data/landfire.esm)  -- fuel model codes\n  - USGS3DEP             (components/earthsci_data/usgs3dep.esm)  -- elevation + slope\n  - ERA5                 (components/earthsci_data/era5.esm)      -- wind, temperature, humidity\n\nEach model entry here is a coupling-interface stub (the variables that participate in the wiring, with house-style param_to_var routing) following the convention of EarthSciModels couplings/*.esm; the full equations live in the referenced component files and are pulled in by the canonical ESS runner.\n\nSimulation configuration (from the original script): Lambert Conformal Conic projection (lat_1=30, lat_2=60, lat_0=39, lon_0=-97); grid spacing dx=2000 m on a 19x21 cell domain centered between Pulga (ignition) and Paradise; ignition is a signed-distance level set of radius 3000 m about (-121.44, 39.81); run window 2018-11-08T14:30Z to 2018-11-09T06:30Z (16 h). The original integrated the discretized PDE with SSPRK33 at dt=dx/400 s, saving every 600 s. ERA5 met, LANDFIRE fuel, and USGS 3DEP terrain are coupled onto the fire grid through explicit EarthSciDiscretizations reprojection (lambert_conformal), lev=min surface reduction (lev_min_surface_reduce), and regridding (conservative_regrid_overlap_join / bspline_regrid) components wired into the coupling \u2014 replacing the former ground_surface interface.",
         "tags": [
             "wildland_fire",
             "camp_fire",
@@ -61,6 +61,38 @@
         },
         "FuelConsumption": {
             "ref": "../../EarthSciModels/components/wildland_fire/level_set/fuel_consumption.esm"
+        },
+        "CampProjection": {
+            "ref": "../../earthscidiscretizations/reprojection/lambert_conformal.esm"
+        },
+        "ERA5uRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/bspline_regrid.esm",
+            "model": "BSplineRegridBilinear2D"
+        },
+        "ERA5vRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/bspline_regrid.esm",
+            "model": "BSplineRegridBilinear2D"
+        },
+        "ERA5tReduce": {
+            "ref": "../../earthscidiscretizations/reduction/lev_min_surface_reduce.esm"
+        },
+        "ERA5tRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+        },
+        "ERA5rReduce": {
+            "ref": "../../earthscidiscretizations/reduction/lev_min_surface_reduce.esm"
+        },
+        "ERA5rRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+        },
+        "FuelRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+        },
+        "SlopeXRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+        },
+        "SlopeYRegrid": {
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
         }
     },
     "domains": {
@@ -143,135 +175,9 @@
                 }
             ],
             "element_type": "Float64"
-        },
-        "camp_fire_3d": {
-            "independent_variable": "t",
-            "temporal": {
-                "start": "2018-11-08T14:30:00Z",
-                "end": "2018-11-09T06:30:00Z",
-                "reference_time": "2018-11-08T14:30:00Z"
-            },
-            "spatial": {
-                "x": {
-                    "min": -2026020.2,
-                    "max": -1990020.2,
-                    "units": "m",
-                    "grid_spacing": 2000.0
-                },
-                "y": {
-                    "min": 374725.0,
-                    "max": 414725.0,
-                    "units": "m",
-                    "grid_spacing": 2000.0
-                },
-                "lev": {
-                    "min": 1.0,
-                    "max": 5.0,
-                    "units": "1",
-                    "grid_spacing": 1.0
-                }
-            },
-            "spatial_ref": "+proj=lcc +lat_1=30.0 +lat_2=60.0 +lat_0=39.0 +lon_0=-97.0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
-            "boundary_conditions": [
-                {
-                    "type": "zero_gradient",
-                    "dimensions": [
-                        "x",
-                        "y"
-                    ]
-                },
-                {
-                    "type": "zero_gradient",
-                    "dimensions": [
-                        "lev"
-                    ]
-                }
-            ],
-            "element_type": "Float64"
-        }
-    },
-    "interfaces": {
-        "ground_surface": {
-            "description": "Ground-level interface: extracts surface (lev=min) ERA5 fields from the 3-D meteorology domain onto the 2-D fire surface.",
-            "domains": [
-                "camp_fire_3d",
-                "camp_fire_surface"
-            ],
-            "dimension_mapping": {
-                "shared": {
-                    "camp_fire_3d.x": "camp_fire_surface.x",
-                    "camp_fire_3d.y": "camp_fire_surface.y"
-                },
-                "constraints": {
-                    "camp_fire_3d.lev": {
-                        "value": "min"
-                    }
-                }
-            },
-            "regridding": {
-                "method": "bilinear"
-            }
         }
     },
     "coupling": [
-        {
-            "type": "variable_map",
-            "from": "ERA5.pl.u",
-            "to": "MidflameWind.u_wind",
-            "transform": "param_to_var",
-            "interface": "ground_surface",
-            "lifting": "pointwise",
-            "description": "Surface eastward wind drives midflame wind."
-        },
-        {
-            "type": "variable_map",
-            "from": "ERA5.pl.v",
-            "to": "MidflameWind.v_wind",
-            "transform": "param_to_var",
-            "interface": "ground_surface",
-            "lifting": "pointwise",
-            "description": "Surface northward wind drives midflame wind."
-        },
-        {
-            "type": "variable_map",
-            "from": "ERA5.pl.t",
-            "to": "EquilibriumMoistureContent.TEMP",
-            "transform": "param_to_var",
-            "interface": "ground_surface",
-            "lifting": "pointwise",
-            "description": "Surface air temperature drives equilibrium moisture content."
-        },
-        {
-            "type": "variable_map",
-            "from": "ERA5.pl.r",
-            "to": "EquilibriumMoistureContent.RH",
-            "transform": "param_to_var",
-            "factor": 0.01,
-            "interface": "ground_surface",
-            "lifting": "pointwise",
-            "description": "Surface relative humidity (percent) drives EMC; factor 0.01 converts %% to fraction."
-        },
-        {
-            "type": "variable_map",
-            "from": "LANDFIRE.fuel_model",
-            "to": "FuelModelLookup.code",
-            "transform": "param_to_var",
-            "description": "LANDFIRE fuel model code selects the Anderson-13 fuel-bed properties."
-        },
-        {
-            "type": "variable_map",
-            "from": "USGS3DEP.dzdx",
-            "to": "TerrainSlope.dzdx",
-            "transform": "param_to_var",
-            "description": "DEM east-west slope feeds terrain-slope computation."
-        },
-        {
-            "type": "variable_map",
-            "from": "USGS3DEP.dzdy",
-            "to": "TerrainSlope.dzdy",
-            "transform": "param_to_var",
-            "description": "DEM north-south slope feeds terrain-slope computation."
-        },
         {
             "type": "variable_map",
             "from": "FuelModelLookup.sigma",
@@ -407,22 +313,6 @@
             "description": "Midflame northward wind drives directional spread."
         },
         {
-            "type": "variable_map",
-            "from": "USGS3DEP.dzdx",
-            "to": "LevelSetFireSpread.dzdx",
-            "transform": "param_to_var",
-            "lifting": "pointwise",
-            "description": "DEM east-west slope drives directional spread."
-        },
-        {
-            "type": "variable_map",
-            "from": "USGS3DEP.dzdy",
-            "to": "LevelSetFireSpread.dzdy",
-            "transform": "param_to_var",
-            "lifting": "pointwise",
-            "description": "DEM north-south slope drives directional spread."
-        },
-        {
             "type": "couple",
             "systems": [
                 "LevelSetFireSpread",
@@ -469,6 +359,179 @@
             },
             "lifting": "pointwise",
             "description": "The level-set field gates fuel consumption: cells with psi<0 (burning) consume fuel via a smooth Heaviside 0.5*(1-tanh(psi/eps_h))."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5uRegrid.F_tgt",
+            "to": "MidflameWind.u_wind",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "B-spline-interpolated surface eastward wind drives midflame wind (ESD bspline_regrid)."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5vRegrid.F_tgt",
+            "to": "MidflameWind.v_wind",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "B-spline-interpolated surface northward wind drives midflame wind."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5tReduce.F_surf",
+            "to": "ERA5tRegrid.F_src",
+            "transform": "param_to_var",
+            "description": "lev=min surface reduction of ERA5 temperature feeds the conservative regridder source."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5tRegrid.F_tgt",
+            "to": "EquilibriumMoistureContent.TEMP",
+            "transform": "param_to_var",
+            "description": "Conservatively regridded surface temperature drives equilibrium moisture content."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5rReduce.F_surf",
+            "to": "ERA5rRegrid.F_src",
+            "transform": "param_to_var",
+            "description": "lev=min surface reduction of ERA5 relative humidity feeds the conservative regridder source."
+        },
+        {
+            "type": "variable_map",
+            "from": "ERA5rRegrid.F_tgt",
+            "to": "EquilibriumMoistureContent.RH",
+            "transform": "param_to_var",
+            "factor": 0.01,
+            "description": "Conservatively regridded surface RH (percent) drives EMC; factor 0.01 converts %% to fraction."
+        },
+        {
+            "type": "variable_map",
+            "from": "LANDFIRE.fuel_model",
+            "to": "FuelRegrid.F_src",
+            "transform": "param_to_var",
+            "description": "LANDFIRE fuel-model code feeds the conservative area-weighted regridder source."
+        },
+        {
+            "type": "variable_map",
+            "from": "FuelRegrid.F_tgt",
+            "to": "FuelModelLookup.code",
+            "transform": "param_to_var",
+            "description": "Regridded fuel-model code selects the Anderson-13 fuel-bed properties."
+        },
+        {
+            "type": "variable_map",
+            "from": "USGS3DEP.dzdx",
+            "to": "SlopeXRegrid.F_src",
+            "transform": "param_to_var",
+            "description": "USGS 3DEP east-west slope feeds the conservative regridder source."
+        },
+        {
+            "type": "variable_map",
+            "from": "SlopeXRegrid.F_tgt",
+            "to": "TerrainSlope.dzdx",
+            "transform": "param_to_var",
+            "description": "Regridded east-west slope feeds terrain-slope computation."
+        },
+        {
+            "type": "variable_map",
+            "from": "SlopeXRegrid.F_tgt",
+            "to": "LevelSetFireSpread.dzdx",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Regridded east-west slope drives directional spread."
+        },
+        {
+            "type": "variable_map",
+            "from": "USGS3DEP.dzdy",
+            "to": "SlopeYRegrid.F_src",
+            "transform": "param_to_var",
+            "description": "USGS 3DEP north-south slope feeds the conservative regridder source."
+        },
+        {
+            "type": "variable_map",
+            "from": "SlopeYRegrid.F_tgt",
+            "to": "TerrainSlope.dzdy",
+            "transform": "param_to_var",
+            "description": "Regridded north-south slope feeds terrain-slope computation."
+        },
+        {
+            "type": "variable_map",
+            "from": "SlopeYRegrid.F_tgt",
+            "to": "LevelSetFireSpread.dzdy",
+            "transform": "param_to_var",
+            "lifting": "pointwise",
+            "description": "Regridded north-south slope drives directional spread."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_x",
+            "to": "ERA5tRegrid.tgt_lon",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target x-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_y",
+            "to": "ERA5tRegrid.tgt_lat",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target y-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_x",
+            "to": "ERA5rRegrid.tgt_lon",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target x-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_y",
+            "to": "ERA5rRegrid.tgt_lat",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target y-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_x",
+            "to": "FuelRegrid.tgt_lon",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target x-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_y",
+            "to": "FuelRegrid.tgt_lat",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target y-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_x",
+            "to": "SlopeXRegrid.tgt_lon",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target x-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_y",
+            "to": "SlopeXRegrid.tgt_lat",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target y-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_x",
+            "to": "SlopeYRegrid.tgt_lon",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target x-coordinate (reprojection) for the regridder target grid."
+        },
+        {
+            "type": "variable_map",
+            "from": "CampProjection.forward_y",
+            "to": "SlopeYRegrid.tgt_lat",
+            "transform": "param_to_var",
+            "description": "Camp Lambert-Conformal target y-coordinate (reprojection) for the regridder target grid."
         }
     ]
 }

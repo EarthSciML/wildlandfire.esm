@@ -37,15 +37,20 @@ system declaratively, so it can be driven by any canonical ESS runner.
 | Wind / temperature / humidity | `ERA5` | `components/earthsci_data/era5.esm` |
 
 **Coupling topology** (all routing is `param_to_var`; the level-set field gates
-fuel consumption through a smooth Heaviside `couple` connector):
+fuel consumption through a smooth Heaviside `couple` connector). Each data
+component reaches its consumer through **EarthSciDiscretizations regrid/reproject
+components wired into the coupling** — `lambert_conformal` (reprojection),
+`lev_min_surface_reduce` (3-D → surface), and `conservative_regrid_overlap_join`
+/ `bspline_regrid` (horizontal regrid) — rather than an `interfaces` block:
 
 ```
-LANDFIRE.fuel_model ─► FuelModelLookup ─► (σ, w₀, δ, Mx, h) ─┐
-USGS3DEP.dzdx/dzdy ─► TerrainSlope ─► tan_phi ───────────────┤
-                                   └─► slope_aspect ─► MidflameWind
-ERA5.u/v ───────────────────────────────► MidflameWind ─► U ─┤
-ERA5.t/r ─► EquilibriumMoistureContent ─► OneHourFuelMoisture ─► Mf ─┤
-                                                                    ▼
+LANDFIRE.fuel_model ──►[conservative regrid]──► FuelModelLookup ─► (σ, w₀, δ, Mx, h) ─┐
+USGS3DEP.dzdx/dzdy ──►[conservative regrid]──► TerrainSlope ─► tan_phi ───────────────┤
+                                            └─► slope_aspect ─► MidflameWind
+ERA5.u/v ─────────────►[bspline regrid]──────────► MidflameWind ─► U ─┤
+ERA5.t/r ─►[lev=min reduce ► conservative regrid]─► EquilibriumMoistureContent
+                                          └─► OneHourFuelMoisture ─► Mf ─┤
+   (lambert_conformal supplies the camp LCC target grid to every regridder)  ▼
                                                         RothermelFireSpread
                                                            │ R, C/B/E, β_ratio, φ_s
                                                            ▼  (lifted pointwise)
@@ -61,9 +66,10 @@ USGS3DEP.dzdx/dzdy, MidflameWind.u_mf ───────►  LevelSetFireSpre
   lon_0=-97`), units metres. Stored as each domain's `spatial_ref`.
 - **Domain** — `camp_fire_surface`, a 19 × 21 cell grid at `dx = 2000 m`,
   centred between Pulga (ignition, −121.44, 39.81) and Paradise (−121.62,
-  39.76). ERA5 meteorology is served on the 3-D pressure-level domain
-  `camp_fire_3d` (`lev = 1:5`) and reduced to the surface through the
-  `ground_surface` interface (`lev = min`, bilinear).
+  39.76). Native-resolution ERA5 meteorology (3-D pressure levels), LANDFIRE
+  fuel, and USGS 3DEP terrain are mapped onto this grid by the EarthSciDiscretizations
+  reproject / `lev = min` reduce / regrid components wired into the coupling
+  (replacing the former `camp_fire_3d` domain + `ground_surface` interface).
 - **Ignition** — a signed-distance level set of radius 3000 m about the Pulga
   point, encoded as the `expression`-typed initial condition for `psi` on
   `camp_fire_surface`.
