@@ -109,3 +109,30 @@ println("                    the sliver `filter` the real conservative_regrid_ov
 println("    total Σ A_j = ", round(sum(aj)/1e6;digits=2), " km² vs fire-domain area ",
         round(dom.nx*dom.ny*cell_area/1e6;digits=2), " km² (mass-conservative to ",
         round(100*(1-abs(sum(aj)-dom.nx*dom.ny*cell_area)/(dom.nx*dom.ny*cell_area));digits=2), "%)")
+
+# (D) item 3: LIVE ERA5 data into F_src + loader refresh (guarded on data + python).
+if isfile(ERA5_NC) && isfile(ERA5_PY)
+    println("(D) LIVE ERA5 Camp Fire data → F_src + loader refresh (no rebuild):")
+    lons,lats,u,v,vt = load_era5_wind(dom; time_index=14)
+    sp = source_grid_from_points(lons, lats)
+    esm = levelset_pde_esm(ls_path, dom; wind=true); disc = discretize(esm)
+    fsd = Dict{String,Any}("u_x"=>copy(u),"u_y"=>copy(v),"dzdx"=>zeros(length(u)),"dzdy"=>zeros(length(u)))
+    disc2, ca, pa = couple_fields(disc, dom, sp, fsd)
+    f!,u0,p,_,vmap = build_evaluator(disc2; parameter_overrides=Dict("R_0"=>r0,"phi_s_coeff"=>phi_s),
+        const_arrays=ca, param_arrays=pa)
+    X(i)=dom.xmin+(i-1)*dom.dx; Y(j)=dom.ymin+(j-1)*dom.dx
+    for i in 1:dom.nx, j in 1:dom.ny
+        k=get(vmap,"psi[$i,$j]",nothing); k===nothing && continue
+        u0[k]=ESS.evaluate_expr(dom.ic, Dict("x"=>X(i),"y"=>Y(j)))
+    end
+    band=[k for k in eachindex(u0) if abs(u0[k])<=dom.dx]
+    du=similar(u0); f!(du,u0,p,0.0); r14=maximum(-du[k] for k in band)
+    _,_,u18,v18,vt18 = load_era5_wind(dom; time_index=18)   # later hour — different wind
+    pa["F_src_u_x"] .= u18; pa["F_src_u_y"] .= v18           # update IN PLACE
+    f!(du,u0,p,0.0); r18=maximum(-du[k] for k in band)        # SAME f!, no rebuild
+    println("    ", length(u), " ERA5 cells; front max spread ", round(r14;digits=2), " m/s @", vt,
+            " → refresh in place → ", round(r18;digits=2), " m/s @", vt18,
+            "  (Δ=", round(r18-r14;digits=2), "; real data drives + refreshes the front)")
+else
+    println("(D) live ERA5 data: skipped (ERA5_NC=$(ERA5_NC) or ERA5_PY not found)")
+end

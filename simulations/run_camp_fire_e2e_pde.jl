@@ -59,9 +59,18 @@ gaps — it does not pretend to reproduce the fire:
     extent → snap to 0.25° → forward-LCC each cell's corners; the round-trip is
     self-consistent) and conservatively regrid from it. Verified mass-conservative:
     Σ A_j = the fire-domain area to ~100% (tiny sliver loss at cells straddling an
-    ERA5 boundary). The source *values* are still the demo ramps — feeding LIVE
-    ERA5/LANDFIRE data into the F_src buffers (the EarthSciIO loader path), and
-    routing through camp_fire.esm's own regrid components, is the remaining step.
+    ERA5 boundary). The source *values* are still the demo ramps.
+
+  * `--era5-data` — LIVE ERA5 data + loader REFRESH. Fill the F_src buffers with the
+    REAL Camp Fire surface (1000 hPa) u/v wind read from the November-2018 ERA5 file
+    (era5_extract.py, a netCDF4 Python shim, since the Julia adapter env is
+    NetCDF-free), on the native ERA5 grid. The front is driven by real data (the
+    Diablo wind event, |v| up to ~14 m/s). Then the driver loads the NEXT hour and
+    updates the SAME F_src buffers IN PLACE — the front tracks the new data with NO
+    rebuild, exercising the discrete-cadence loader-refresh the param_arrays buffer
+    exists for. (This is the data-access shim, not yet the formal EarthSciData loader
+    binding; and routing through camp_fire.esm's own regrid components is item 4.)
+    Set ERA5_NC / ERA5_PYTHON to override the data file / netCDF Python.
 
 The integration window is SHORT by design (the Python `--seconds` analogue): the
 goal is to drive the real pipeline and surface feasibility, not to reproduce the
@@ -69,7 +78,7 @@ goal is to drive the real pipeline and surface feasibility, not to reproduce the
 
 USAGE
     EARTHSCISERIALIZATION=.../EarthSciSerialization \\
-        julia simulations/run_camp_fire_e2e_pde.jl [--seconds 30] [--r0 0.71] [--wind|--era5]
+        julia simulations/run_camp_fire_e2e_pde.jl [--seconds 30] [--r0 0.71] [--wind|--era5|--era5-data]
 
 `EARTHSCISERIALIZATION` defaults to a sibling `../EarthSciSerialization` checkout.
 The script activates that package's `scripts/pde_sim_adapter` project (which pins
@@ -334,6 +343,59 @@ function source_grid_era5(dom; dll::Float64 = 0.25)
     return sp, nlon, nlat, clons, clats
 end
 
+# --- Live ERA5 data (item 3). The Julia adapter env is NetCDF-free, so a small
+#     netCDF4 Python shim (era5_extract.py) reads the real Camp Fire ERA5 file and
+#     returns surface u/v on the native ERA5 grid; the values fill the live F_src
+#     buffers, so the front is driven by — and refreshes from — real data. (This is
+#     the data-access shim, not the formal EarthSciData loader binding.) ---
+const ERA5_NC = get(ENV, "ERA5_NC",
+    joinpath(get(ENV, "EARTHSCIDATADIR", joinpath(homedir(), "data", "earthsciml")),
+             "era5_pressure_levels", "era5_pl_2018_11.nc"))
+const ERA5_PY = get(ENV, "ERA5_PYTHON", joinpath(homedir(), "anaconda3", "bin", "python"))
+const ERA5_EXTRACT = joinpath(@__DIR__, "era5_extract.py")
+
+"Domain lat/lon bbox (padded) via inverse-LCC of the domain perimeter."
+function _domain_lonlat_bbox(dom; pad = 0.3)
+    dx = dom.dx
+    xlo, ylo = dom.xmin - dx / 2, dom.ymin - dx / 2
+    xhi = dom.xmin + (dom.nx - 1) * dx + dx / 2
+    yhi = dom.ymin + (dom.ny - 1) * dx + dx / 2
+    lons = Float64[]; lats = Float64[]
+    for fr in range(0.0, 1.0; length = 21)
+        for (x, y) in ((xlo + fr*(xhi-xlo), ylo), (xlo + fr*(xhi-xlo), yhi),
+                       (xlo, ylo + fr*(yhi-ylo)), (xhi, ylo + fr*(yhi-ylo)))
+            lo, la = lcc_inverse(x, y); push!(lons, lo); push!(lats, la)
+        end
+    end
+    (minimum(lons) - pad, maximum(lons) + pad, minimum(lats) - pad, maximum(lats) + pad)
+end
+
+"Load real ERA5 1000-hPa u/v wind for the domain at `time_index` (hourly; 14 =
+2018-11-08 14:00 UTC, the Camp Fire ignition hour) via the netCDF4 Python shim.
+Returns (lons, lats, u, v, valid_time) over the native ERA5 grid points."
+function load_era5_wind(dom; time_index::Int = 14)
+    isfile(ERA5_NC) || error("ERA5 file not found: $ERA5_NC (set ERA5_NC)")
+    isfile(ERA5_PY) || error("netCDF Python not found: $ERA5_PY (set ERA5_PYTHON)")
+    lo0, lo1, la0, la1 = _domain_lonlat_bbox(dom)
+    out = read(`$ERA5_PY $ERA5_EXTRACT $ERA5_NC $lo0 $lo1 $la0 $la1 $time_index`, String)
+    j = JSON3.read(out)
+    return (Float64.(j.lons), Float64.(j.lats), Float64.(j.u), Float64.(j.v), String(j.valid_time))
+end
+
+"Source-cell polygons centered on explicit lon/lat points (the ERA5 native grid),
+each ±dll/2 reprojected to the fire's LCC frame. Returns src_poly [ns,4,2]."
+function source_grid_from_points(lons, lats; dll::Float64 = 0.25)
+    ns = length(lons); sp = zeros(ns, 4, 2)
+    for s in 1:ns
+        a, b = lons[s] - dll/2, lons[s] + dll/2
+        c, e = lats[s] - dll/2, lats[s] + dll/2
+        for (k, (lo, la)) in enumerate(((a, c), (b, c), (b, e), (a, e)))
+            x, y = lcc_forward(lo, la); sp[s, k, 1] = x; sp[s, k, 2] = y
+        end
+    end
+    return sp
+end
+
 "Index_sets + variables for the SHARED-geometry conservative regrid onto the fire
 grid: the declaratively-constructed target cells, the const `src_poly` operand, the
 ranged clip → A_ij → A_j, and one observed `fn[x,y] = Σ_s A_ij·F_src_<fn> / A_j`
@@ -443,6 +505,7 @@ function parse_cli(args)
     r0 = 0.71            # representative Anderson FM1 grass spread, ~3 m/s midflame wind
     wind = false         # --wind: drive the coupled fields from a coarse LCC-frame regrid
     era5 = false         # --era5: use the real ERA5 0.25° lat/lon grid reprojected to LCC
+    era5_data = false    # --era5-data: fill F_src with LIVE ERA5 wind + demo a refresh
     i = 1
     while i <= length(args)
         a = args[i]
@@ -458,35 +521,50 @@ function parse_cli(args)
             wind = true; i += 1
         elseif a == "--era5"
             era5 = true; wind = true; i += 1     # --era5 implies the coupled run
+        elseif a == "--era5-data"
+            era5_data = true; era5 = true; wind = true; i += 1
         else
             i += 1
         end
     end
-    (seconds, r0, wind, era5)
+    (seconds, r0, wind, era5, era5_data)
 end
 
 function main(args = ARGS)
-    seconds, r0, wind, era5 = parse_cli(args)
+    seconds, r0, wind, era5, era5_data = parse_cli(args)
     dom = camp_domain(CAMP_FIRE_ESM)
-    # Source grid for the coupled fields: the REAL ERA5 0.25° lat/lon grid reprojected
-    # into the fire's LCC frame (--era5), or a coarse LCC-frame grid for the plain
-    # --wind demo. Either way it tiles the fire domain; the conservative regrid onto
-    # the fire grid is identical. Coupled forcing (the demo values): an eastward
-    # midflame-wind ramp (W→E, drives φ_W) and an upslope terrain gradient (S→N,
-    # drives φ_S); u_y/dzdx are zero — proving all four fields plumb through one regrid.
-    src_poly, ncol, nrow, src_lons, src_lats = era5 ?
-        source_grid_era5(dom) : ((sp, c, r) = source_grid_lcc(dom; nsx = 3, nsy = 3); (sp, c, r, nothing, nothing))
-    ns_src = ncol * nrow
-    ux_col   = collect(range(2.0, 8.0; length = ncol))   # W→E midflame wind (m/s)
-    dzdy_row = collect(range(0.0, 0.5; length = nrow))   # S→N terrain slope (rise/run)
-    col_of(s) = ((s - 1) % ncol) + 1
-    row_of(s) = ((s - 1) ÷ ncol) + 1
-    field_src = Dict(
-        "u_x"  => [ux_col[col_of(s)] for s in 1:ns_src],
-        "u_y"  => zeros(ns_src),
-        "dzdx" => zeros(ns_src),
-        "dzdy" => [dzdy_row[row_of(s)] for s in 1:ns_src])
+    # Source grid + field values for the coupled regrid. Three modes:
+    #   --era5-data : the REAL ERA5 native grid + LIVE Camp Fire u/v wind (item 3)
+    #   --era5      : the real ERA5 0.25° grid reprojected to LCC, demo ramp values
+    #   --wind      : a coarse LCC-frame grid, demo ramp values
+    # The conservative regrid onto the fire grid is identical across all three.
     phi_s_coeff = 5.275                                   # slope-factor coeff (β=1); 0 disables φ_S
+    local field_src, src_poly, srcdesc
+    era5_t0 = 14                                           # 2018-11-08 14:00 UTC — ignition hour
+    if era5_data
+        elons, elats, eu, ev, evt = load_era5_wind(dom; time_index = era5_t0)
+        src_poly = source_grid_from_points(elons, elats)
+        nz = zeros(length(eu))
+        field_src = Dict("u_x" => copy(eu), "u_y" => copy(ev), "dzdx" => nz, "dzdy" => copy(nz))
+        srcdesc = "LIVE ERA5 wind @ $evt ($(length(eu)) native 0.25° cells, " *
+                  "|u|≤$(round(maximum(abs,eu);digits=1)) |v|≤$(round(maximum(abs,ev);digits=1)) m/s)"
+    else
+        src_poly, ncol, nrow, src_lons, src_lats = era5 ?
+            source_grid_era5(dom) : ((sp, c, r) = source_grid_lcc(dom; nsx = 3, nsy = 3); (sp, c, r, nothing, nothing))
+        ns_src = ncol * nrow
+        ux_col   = collect(range(2.0, 8.0; length = ncol))   # W→E midflame wind (m/s)
+        dzdy_row = collect(range(0.0, 0.5; length = nrow))   # S→N terrain slope (rise/run)
+        col_of(s) = ((s - 1) % ncol) + 1
+        row_of(s) = ((s - 1) ÷ ncol) + 1
+        field_src = Dict(
+            "u_x"  => [ux_col[col_of(s)] for s in 1:ns_src],
+            "u_y"  => zeros(ns_src),
+            "dzdx" => zeros(ns_src),
+            "dzdy" => [dzdy_row[row_of(s)] for s in 1:ns_src])
+        srcdesc = era5 ?
+            "real ERA5 0.25° grid ($(ncol)×$(nrow) cells) reprojected to LCC (demo ramp values)" :
+            "$(ncol)×$(nrow)-cell LCC-frame grid (demo ramp values)"
+    end
 
     println("Camp Fire — thin Julia driver " *
             "(load camp_fire.esm -> discretize via ESS.jl -> run via tree-walk + Tsit5)\n")
@@ -535,15 +613,9 @@ function main(args = ARGS)
         # is built through build_evaluator (clip → A_ij → A_j → field, inlined per
         # cell) and feeds U_n/tan_phi_n → φ_W/φ_S → S_n → D(psi,t).
         disc, wind_ca, wind_pa = couple_fields(disc, dom, src_poly, field_src)
-        srcdesc = era5 ?
-            "real ERA5 0.25° grid ($(ncol)×$(nrow) cells, lon[$(round(minimum(src_lons)-0.125;digits=2)),"*
-            "$(round(maximum(src_lons)+0.125;digits=2))] lat[$(round(minimum(src_lats)-0.125;digits=2)),"*
-            "$(round(maximum(src_lats)+0.125;digits=2))]) reprojected to LCC" :
-            "$(ncol)×$(nrow)-cell LCC-frame grid"
         println("   level-set PDE -> $sysclass; $(dom.nx * dom.ny) ODE states + declarative " *
-                "conservative regrid of $(length(COUPLED_FIELDS)) fields from a $srcdesc " *
-                "(u_x $(round(first(ux_col);digits=1))→$(round(last(ux_col);digits=1)) m/s W→E, " *
-                "dzdy 0→$(round(last(dzdy_row);digits=2)) S→N), R_0=$(r0) m/s, φ_s=$(phi_s_coeff)")
+                "conservative regrid of $(length(COUPLED_FIELDS)) fields from $srcdesc, " *
+                "R_0=$(r0) m/s, φ_s=$(phi_s_coeff)")
     else
         println("   level-set PDE -> $sysclass; $(dom.nx * dom.ny) ODE states " *
                 "(Rothermel/wind/slope coupling held at constants, R_0=$(r0) m/s)")
@@ -595,17 +667,26 @@ function main(args = ARGS)
             "(Rothermel R_0=$(r0) m/s); burned area " *
             "$(round(burned(u0); digits = 2)) -> $(round(burned(sol.u[end]); digits = 2)) cells " *
             "(smooth), psi<0 cells $burn0 -> $burn1")
-    if wind
-        # Each regridded field must drive its own front anisotropy: the eastward
-        # wind enhances the DOWNWIND (east) front (U_n>0) and the upslope gradient
-        # enhances the UPHILL (north) front (tan_phi_n>0); the opposite sides stay
-        # at ≈R_0 (max(0,·)=0). Split the front band about the ignition cell on each
-        # axis to show the regrid-driven anisotropy is real and per-field separable.
-        # The eastward wind (the dominant field) enhances the DOWNWIND/E front
-        # (U_n>0) and leaves the UPWIND/W front at ≈R_0 (max(0,U_n)=0) — the clean,
-        # field-driven anisotropy. (Slope is ~100× weaker than wind here and the
-        # ignition circle is only ~1.5 cells across, so the two fields can't be
-        # separated spatially on one run; verify_coupling.jl ablates each in turn.)
+    if era5_data
+        # The front is driven by REAL Camp Fire wind. Demonstrate the loader-refresh
+        # path: load the NEXT hour's ERA5 wind and update the SAME F_src buffers in
+        # place — the front tracks the new data with NO rebuild (the discrete-cadence
+        # loader refresh the param_arrays buffer exists for).
+        rate0 = rate
+        _, _, eu2, ev2, evt2 = load_era5_wind(dom; time_index = era5_t0 + 1)
+        wind_pa["F_src_u_x"] .= eu2
+        wind_pa["F_src_u_y"] .= ev2
+        f!(du0, u0, p, 0.0)                       # re-evaluate — no rebuild
+        rate1 = isempty(band) ? NaN : maximum(-du0[k] for k in band)
+        println("   driven by LIVE ERA5 Camp Fire wind: front max spread ~$(round(rate0;digits=2)) m/s.")
+        println("   loader refresh → next hour ($evt2): F_src updated in place (no rebuild), " *
+                "front max spread ~$(round(rate1;digits=2)) m/s — the front tracks live data")
+    elseif wind
+        # Each regridded field drives its own front anisotropy: the eastward wind
+        # enhances the DOWNWIND (east) front (U_n>0) and leaves the UPWIND (west)
+        # front at ≈R_0 (max(0,U_n)=0). (Slope is ~100× weaker and the ignition
+        # circle is ~1.5 cells across, so the two fields can't be separated spatially
+        # on one run; verify_coupling.jl ablates each in turn.)
         i0 = round(Int, (-2000072.1 - dom.xmin) / dom.dx) + 1
         spd(i, j) = -du0[var_map["psi[$i,$j]"]]
         infront(i, j) = haskey(var_map, "psi[$i,$j]") && abs(u0[var_map["psi[$i,$j]"]]) <= dom.dx
