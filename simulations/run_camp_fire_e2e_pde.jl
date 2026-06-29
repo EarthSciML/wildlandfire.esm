@@ -72,13 +72,33 @@ gaps — it does not pretend to reproduce the fire:
     binding; and routing through camp_fire.esm's own regrid components is item 4.)
     Set ERA5_NC / ERA5_PYTHON to override the data file / netCDF Python.
 
+  * `--full` — WHOLE-SYSTEM run: the front spreads at the Rothermel rate of spread
+    COMPUTED from the flattened physics, not the constant --r0. The full
+    21-component system cannot lower through ONE build_evaluator — flatten() +
+    serialize_expression are LOSSY (they drop the regridders' `index_sets`, the
+    FuelModelLookup `function_tables` / embedded `const` data, and intersect_polygon's
+    `manifold`; the MTK-free evaluator also inlines no deep observed chains) — so the
+    system runs in its natural STAGES, every component participating. This mode adds
+    the SCALAR fire-physics stage: it lifts the TerrainSlope→MidflameWind→EMC→
+    1h-moisture→Rothermel chain straight out of the flattened equations, topologically
+    inlines it (the level-set core's own trick), and evaluates it through
+    build_evaluator to compute R_0 and the level-set coefficients (C/B/E_wind,
+    beta_ratio, phi_s_coeff) from the regridded forcing (the wind comes from the same
+    coupled field the front uses; FuelModelLookup's lossy table is bypassed with the
+    Anderson-13 FM1 fuel-bed values it would emit). Those feed the level-set PDE, so
+    the front speed is data-derived. `--full` implies `--wind`. Verify:
+    verify_full_system.jl (R responds to wind/humidity; the monolithic attempt fails
+    on the lossy losses). camp_fire.esm's 5 conservative regridders now reference the
+    self-computing conservative_regrid_overlap_join_computed.esm (declarative A_ij —
+    no host overlap matrix; verify_computed via the ESD regridding/ test).
+
 The integration window is SHORT by design (the Python `--seconds` analogue): the
 goal is to drive the real pipeline and surface feasibility, not to reproduce the
 16 h fire.
 
 USAGE
     EARTHSCISERIALIZATION=.../EarthSciSerialization \\
-        julia simulations/run_camp_fire_e2e_pde.jl [--seconds 30] [--r0 0.71] [--wind|--era5|--era5-data]
+        julia simulations/run_camp_fire_e2e_pde.jl [--seconds 30] [--r0 0.71] [--wind|--era5|--era5-data|--full]
 
 `EARTHSCISERIALIZATION` defaults to a sibling `../EarthSciSerialization` checkout.
 The script activates that package's `scripts/pde_sim_adapter` project (which pins
@@ -497,6 +517,133 @@ function couple_fields(disc, dom, src_poly, field_src::AbstractDict)
 end
 
 # ---------------------------------------------------------------------------
+# WHOLE-SYSTEM stage: the Rothermel rate-of-spread PHYSICS chain (--full).
+#
+# `flatten(load(camp_fire.esm))` gives the full 21-component coupled system, but it
+# CANNOT be lowered through one build_evaluator: flatten()/serialize_expression are
+# LOSSY — they drop `index_sets` (so the 5 regridders' value-invention geometry can't
+# be reconstructed), `function_tables` / embedded `const` data (the FuelModelLookup
+# code→properties table becomes an `fn` node with empty {"op":"const"} operands), and
+# the MTK-free evaluator inlines no deep observed chains. This is the precise shape of
+# the Julia-binding "no flattened_to_esm" gap. So the system runs in its NATURAL
+# STAGES, every component participating.
+#
+# This stage extracts the SCALAR fire-physics chain — TerrainSlope, MidflameWind,
+# EquilibriumMoistureContent, OneHourFuelMoisture, RothermelFireSpread — straight from
+# the flattened equations, topologically INLINES it (the same single-pass substitute
+# the level-set core uses), and runs it through build_evaluator to COMPUTE the Rothermel
+# rate of spread R and the level-set coefficients (C/B/E_wind, beta_ratio, phi_s_coeff)
+# from the regridded met/fuel/slope forcing — the values the driver otherwise holds at
+# the constant --r0. FuelModelLookup is bypassed (its table is the lossy `fn`): its 5
+# outputs are supplied as the Anderson-13 FM1 (short grass) SI values lookup produces.
+# ---------------------------------------------------------------------------
+
+const PHYS_COMPONENTS = ["TerrainSlope", "MidflameWind", "EquilibriumMoistureContent",
+                         "OneHourFuelMoisture", "RothermelFireSpread"]
+# Anderson-13 FM1 (short grass) SI fuel-bed properties = FuelModelLookup outputs for code 1.
+const FM1_FUEL = Dict{String,Float64}(
+    "FuelModelLookup.sigma" => 11483.0, "FuelModelLookup.w_0" => 0.166,
+    "FuelModelLookup.delta" => 0.3048, "FuelModelLookup.M_x" => 0.12,
+    "FuelModelLookup.h" => 18608000.0)
+# Each Rothermel read-out → the level-set parameter the camp_fire.esm coupling maps it to.
+const ROTHERMEL_TO_LEVELSET = ["RothermelFireSpread.R" => "R_0",
+    "RothermelFireSpread.C_coeff" => "C_wind", "RothermelFireSpread.B_coeff" => "B_wind",
+    "RothermelFireSpread.E_coeff" => "E_wind", "RothermelFireSpread.beta_ratio" => "beta_ratio",
+    "RothermelFireSpread.phi_s_coeff" => "phi_s_coeff"]
+
+"Name an equation's LHS defines (a bare state/observed, or the integrand of D(x)/aggregate)."
+function _eq_lhs_name(e)
+    l = ESS.serialize_expression(e.lhs)
+    l isa AbstractString && return String(l)
+    if l isa AbstractDict && get(l, "op", "") in ("D", "index")
+        a = l["args"][1]
+        return a isa AbstractString ? String(a) : nothing
+    end
+    return nothing
+end
+
+"Collect every variable-name leaf in a serialized AST (skips op/structural keys)."
+function _collect_refs!(acc, node)
+    if node isa AbstractString
+        push!(acc, String(node))
+    elseif node isa AbstractDict
+        for (k, v) in node
+            k in ("op", "wrt", "id", "manifold", "semiring") || _collect_refs!(acc, v)
+        end
+    elseif node isa AbstractVector
+        for x in node
+            _collect_refs!(acc, x)
+        end
+    end
+    return acc
+end
+
+"Compute the Rothermel rate of spread + level-set coefficients from the flattened
+camp_fire system, given representative scalar forcing for the regridded coupling
+inputs (`fieldvals`, keyed by the producer's flattened name, e.g. ERA5uRegrid.F_tgt).
+Extracts the fire-physics components, inlines the feed-forward algebraic chain, and
+evaluates it through build_evaluator. Returns a Dict of the read-out values."
+function rothermel_from_fields(flat, fieldvals::AbstractDict)
+    sv, ov, pv = flat.state_variables, flat.observed_variables, flat.parameters
+    isphys(nm) = any(p -> startswith(nm, p * "."), PHYS_COMPONENTS)
+    alg = Dict{String,ESS.Expr}()
+    for e in flat.equations
+        nm = _eq_lhs_name(e)
+        (nm === nothing || !isphys(nm)) && continue
+        l = ESS.serialize_expression(e.lhs)
+        l isa AbstractString && (alg[nm] = e.rhs)          # algebraic x = expr (the whole chain is)
+    end
+    obs_set = Set(keys(alg))
+    deps = Dict(nm => intersect(free_variables(alg[nm]), obs_set) for nm in keys(alg))
+    order = String[]; done = Set{String}()
+    while length(order) < length(alg)
+        prog = false
+        for nm in keys(alg)
+            nm in done && continue
+            all(d -> d in done, deps[nm]) && (push!(order, nm); push!(done, nm); prog = true)
+        end
+        prog || error("cyclic fire-physics dependency: $(setdiff(keys(alg), done))")
+    end
+    resolved = Dict{String,ESS.Expr}()
+    for nm in order
+        resolved[nm] = ESS.substitute(alg[nm], resolved)
+    end
+
+    readouts = String.(first.(ROTHERMEL_TO_LEVELSET))
+    vars = Dict{String,Any}(); eqs = Any[]; probe_of = Dict{String,String}()
+    for (i, nm) in enumerate(readouts)
+        haskey(resolved, nm) || error("fire-physics read-out not found: $nm")
+        pn = "__probe$i"; probe_of[nm] = pn
+        vars[pn] = Dict{String,Any}("type" => "state")
+        push!(eqs, Dict{String,Any}("lhs" => Dict{String,Any}("op" => "D", "args" => Any[pn], "wrt" => "t"),
+                                    "rhs" => ESS.serialize_expression(resolved[nm])))
+    end
+    refs = Set{String}()
+    for e in eqs
+        _collect_refs!(refs, e["rhs"])
+    end
+    for p in intersect(refs, Set(keys(pv)))
+        d = Dict{String,Any}("type" => "parameter")
+        pv[p].default === nothing || (d["default"] = pv[p].default)
+        vars[p] = d
+    end
+    # Dangling inputs (regridder/lookup outputs) become representative parameters.
+    forcing = Base.merge(Dict{String,Float64}(FM1_FUEL), Dict{String,Float64}(fieldvals))
+    for r in refs
+        (haskey(vars, r) || !occursin(".", r)) && continue
+        vars[r] = Dict{String,Any}("type" => "parameter", "default" => get(forcing, r, 0.0))
+    end
+
+    esm = Dict{String,Any}("esm" => "0.5.0",
+        "metadata" => Dict{String,Any}("name" => "CampFireRothermelChain"),
+        "models" => Dict{String,Any}("Phys" => Dict{String,Any}("variables" => vars, "equations" => eqs)))
+    f!, u0, p, _t, vmap = build_evaluator(esm;
+        initial_conditions = Dict{String,Float64}(pn => 0.0 for pn in values(probe_of)))
+    du = similar(u0); f!(du, u0, p, 0.0)
+    return Dict(nm => du[vmap[probe_of[nm]]] for nm in readouts)
+end
+
+# ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
 
@@ -506,6 +653,7 @@ function parse_cli(args)
     wind = false         # --wind: drive the coupled fields from a coarse LCC-frame regrid
     era5 = false         # --era5: use the real ERA5 0.25° lat/lon grid reprojected to LCC
     era5_data = false    # --era5-data: fill F_src with LIVE ERA5 wind + demo a refresh
+    full = false         # --full: COMPUTE R_0 + level-set coeffs from the Rothermel physics chain
     i = 1
     while i <= length(args)
         a = args[i]
@@ -523,15 +671,17 @@ function parse_cli(args)
             era5 = true; wind = true; i += 1     # --era5 implies the coupled run
         elseif a == "--era5-data"
             era5_data = true; era5 = true; wind = true; i += 1
+        elseif a == "--full"
+            full = true; wind = true; i += 1     # --full implies the coupled (per-cell) run
         else
             i += 1
         end
     end
-    (seconds, r0, wind, era5, era5_data)
+    (seconds, r0, wind, era5, era5_data, full)
 end
 
 function main(args = ARGS)
-    seconds, r0, wind, era5, era5_data = parse_cli(args)
+    seconds, r0, wind, era5, era5_data, full = parse_cli(args)
     dom = camp_domain(CAMP_FIRE_ESM)
     # Source grid + field values for the coupled regrid. Three modes:
     #   --era5-data : the REAL ERA5 native grid + LIVE Camp Fire u/v wind (item 3)
@@ -599,6 +749,34 @@ function main(args = ARGS)
     println("   [load() resolved $(length(f.models)) component {ref} stubs " *
             "(incl. ESD reproject/reduce/regrid wired into the coupling); no interface]")
 
+    # 1b. PHYSICS (--full) — COMPUTE the rate of spread R and the level-set
+    #     coefficients from the flattened Rothermel chain (the part otherwise held at
+    #     --r0). The whole flattened system can't lower monolithically (flatten drops
+    #     index_sets/function_tables/const data — see rothermel_from_fields), so this
+    #     runs the SCALAR fire-physics stage through its own build_evaluator and feeds
+    #     the result into the level-set PDE. The wind that drives R comes from the same
+    #     regridded field the front uses (mean of the coupled u_x/u_y).
+    ls_overrides = Dict{String,Float64}("R_0" => r0, "phi_s_coeff" => phi_s_coeff)
+    if full
+        meanf(k) = (v = field_src[k]; isempty(v) ? 0.0 : sum(v) / length(v))
+        fieldvals = Dict{String,Float64}(
+            "ERA5uRegrid.F_tgt" => meanf("u_x"), "ERA5vRegrid.F_tgt" => meanf("u_y"),
+            "ERA5tRegrid.F_tgt" => 288.0, "ERA5rRegrid.F_tgt" => 0.23,
+            "SlopeXRegrid.F_tgt" => 0.05, "SlopeYRegrid.F_tgt" => 0.05)
+        phys = rothermel_from_fields(flat, fieldvals)
+        for (rn, ln) in ROTHERMEL_TO_LEVELSET
+            ls_overrides[ln] = phys[rn]
+        end
+        r0 = ls_overrides["R_0"]; phi_s_coeff = ls_overrides["phi_s_coeff"]
+        println("== physics (--full): Rothermel rate-of-spread chain through build_evaluator ==")
+        println("   5 components (slope→wind→EMC→1h-moisture→Rothermel) inlined + evaluated; " *
+                "fuel = Anderson-13 FM1")
+        println("   computed: R_0=$(round(r0;digits=3)) m/s, C_wind=$(round(ls_overrides["C_wind"];sigdigits=3)), " *
+                "B_wind=$(round(ls_overrides["B_wind"];digits=3)), E_wind=$(round(ls_overrides["E_wind"];digits=3)), " *
+                "β_ratio=$(round(ls_overrides["beta_ratio"];digits=3)), φ_s_coeff=$(round(phi_s_coeff;digits=2))")
+        println("   [the front now spreads at the data-computed Rothermel rate, not the constant --r0]")
+    end
+
     # 2. DISCRETIZE — lower the 2-D level-set Hamilton-Jacobi front PDE (the part
     #    Python defers) with centered |grad psi| stencils, on the real grid.
     println("== discretize (centered 2nd-order |grad psi| stencils) ==")
@@ -625,7 +803,7 @@ function main(args = ARGS)
     #    IC, evaluated per cell. Loaders/coupling held at representative constants.
     println("== run (ESS build_evaluator; Tsit5); tspan=(0, $(round(seconds; digits = 0)) s) ==")
     f!, u0, p, _tspan, var_map = wind ?
-        build_evaluator(disc; parameter_overrides = Dict("R_0" => r0, "phi_s_coeff" => phi_s_coeff),
+        build_evaluator(disc; parameter_overrides = ls_overrides,
                         const_arrays = wind_ca, param_arrays = wind_pa) :
         build_evaluator(disc; parameter_overrides = Dict("R_0" => r0))
     X(i) = dom.xmin + (i - 1) * dom.dx

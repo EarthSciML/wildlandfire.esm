@@ -77,22 +77,22 @@
             "ref": "../../earthscidiscretizations/reduction/lev_min_surface_reduce.esm"
         },
         "ERA5tRegrid": {
-            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join_computed.esm"
         },
         "ERA5rReduce": {
             "ref": "../../earthscidiscretizations/reduction/lev_min_surface_reduce.esm"
         },
         "ERA5rRegrid": {
-            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join_computed.esm"
         },
         "FuelRegrid": {
-            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join_computed.esm"
         },
         "SlopeXRegrid": {
-            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join_computed.esm"
         },
         "SlopeYRegrid": {
-            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join.esm"
+            "ref": "../../earthscidiscretizations/regridding/conservative_regrid_overlap_join_computed.esm"
         }
     },
     "domains": {
