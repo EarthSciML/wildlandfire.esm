@@ -145,18 +145,25 @@ end
 Camp Fire grid. The component's array-shaped observeds (psi_x, grad_mag, phi_W, …)
 are folded into the single `D(psi,t)` RHS by single-pass topological substitution,
 because the MTK-free evaluator only takes scalar observeds."
+# The level-set inputs that --wind drives per cell from the conservative regrid:
+# wind components (u_x, u_y → U_n → φ_W) and terrain slope (dzdx, dzdy → tan_phi_n
+# → φ_S). All four feed S_n = R_0·(1+φ_W+φ_S) and so the front speed at each cell.
+const COUPLED_FIELDS = ["u_x", "u_y", "dzdx", "dzdy"]
+
 function levelset_pde_esm(ls_path, dom; wind::Bool = false)
     doc = JSON3.read(read(ls_path, String), Dict{String, Any})
     model = doc["models"]["LevelSetFireSpread"]
     vars = model["variables"]
 
     if wind
-        # u_x becomes a per-cell field fed by the wind regrid (attached AFTER
-        # discretize). Declaring it grid-shaped makes discretize keep it as an array
-        # INPUT — a bare reference inside the scalarized D(psi,t) arrayop that the
-        # couple step rewrites to index(u_x,i,j); build_evaluator then inlines the
-        # regrid per cell. (u_y stays the scalar-0 parameter, so U_n = u_x·ψ_x/|∇ψ|.)
-        vars["u_x"]["shape"] = Any["x", "y"]
+        # Each coupled field becomes a per-cell array fed by the regrid (attached
+        # AFTER discretize). Declaring it grid-shaped makes discretize keep it as an
+        # array INPUT — a bare reference inside the scalarized D(psi,t) arrayop that
+        # the couple step rewrites to index(field,i,j); build_evaluator then inlines
+        # the regrid per cell (the ess-14f.4 coupled-array bridge).
+        for fn in COUPLED_FIELDS
+            vars[fn]["shape"] = Any["x", "y"]
+        end
     end
 
     obs_names = String[k for (k, v) in vars if get(v, "type", "") == "observed"]
@@ -209,14 +216,14 @@ function levelset_pde_esm(ls_path, dom; wind::Bool = false)
 end
 
 # ---------------------------------------------------------------------------
-# Wind coupling — a declarative conservative regrid that drives the level-set's
-# per-cell eastward midflame wind u_x from a source wind field, computed THROUGH
-# the tree-walk evaluator (no host-supplied geometry). This is the first met→fire
-# field wired end-to-end: ERA5 surface wind → regrid → u_x[x,y] → U_n → φ_W → S_n
-# → D(psi,t). The source grid here is a coarse band in the fire's own LCC frame
-# (a west→east wind ramp); swapping in ERA5's lat/lon grid + reprojection +
-# live loader data is the remaining "add the rest" step — the regrid machinery
-# (clip → A_ij → A_j → u_x, inlined per cell) is identical.
+# Met→fire coupling — a declarative conservative regrid that drives the level-set's
+# per-cell wind (u_x,u_y) and slope (dzdx,dzdy) from source fields, computed THROUGH
+# the tree-walk evaluator (the overlap matrix A_ij — clip → polygon_area — and the
+# apply A_ijᵀ·F_src/A_j are build-once at setup; each field is inlined per cell).
+# The fire-grid target cells are CONSTRUCTED declaratively from the grid origin/
+# spacing; the source cells come in as const polygons (`source_grid_*` below) — a
+# coarse LCC band for the demo, the real ERA5 lat/lon grid reprojected to LCC for
+# `--era5`. All fields share ONE geometry (clip/A_ij/A_j); only F_src differs.
 # ---------------------------------------------------------------------------
 
 _ixd(args...) = Dict{String, Any}("op" => "index", "args" => collect(Any, args))
@@ -228,28 +235,43 @@ _arrd(oidx, ranges, body) = Dict{String, Any}("op" => "arrayop", "output_idx" =>
     "ranges" => Dict{String, Any}(k => Dict{String, Any}("from" => v) for (k, v) in ranges),
     "args" => Any[], "expr" => body)
 
-"Index_sets + variables for the conservative regrid of an eastward-wind source
-field (`ns` cells banded along x, spanning the full y extent) onto the fire grid,
-producing `u_x[x,y]`. Cell polygons are CONSTRUCTED from the grid origin/spacing
-(cell-centered on the nodes X(i),Y(j)); A_ij = polygon_area(intersect_polygon(...))
-ranges over (x,y,s). Returns (index_sets, variables, F_src)."
-function wind_regrid_spec(dom; ns::Int = 3, uvals = collect(range(2.0, 8.0; length = ns)))
+"Host-build the source-grid cell polygons (const) as a coarse `nsx×nsy` grid over
+the fire-domain extent, in the fire's OWN LCC frame (no reprojection — `--era5`
+swaps in the real lat/lon grid). Returns (src_poly [ns,4,2], nsx, nsy); the flat
+source index is s = (sy-1)*nsx + sx, column-major in (sx,sy)."
+function source_grid_lcc(dom; nsx::Int = 3, nsy::Int = 3)
     nx, ny, dx = dom.nx, dom.ny, dom.dx
     xlo = dom.xmin - dx / 2          # fire-domain west/south edges (cells centered on nodes)
     ylo = dom.ymin - dx / 2
-    dsx = nx * dx / ns               # source cell width in x
-    dys = ny * dx                    # source spans the full y extent
+    dsx = nx * dx / nsx
+    dsy = ny * dx / nsy
+    ns = nsx * nsy
+    sp = zeros(ns, 4, 2)
+    for sy in 1:nsy, sx in 1:nsx
+        s = (sy - 1) * nsx + sx
+        x0 = xlo + (sx - 1) * dsx
+        y0 = ylo + (sy - 1) * dsy
+        sp[s, 1, :] = [x0, y0];            sp[s, 2, :] = [x0 + dsx, y0]
+        sp[s, 3, :] = [x0 + dsx, y0 + dsy]; sp[s, 4, :] = [x0, y0 + dsy]
+    end
+    return sp, nsx, nsy
+end
+
+"Index_sets + variables for the SHARED-geometry conservative regrid onto the fire
+grid: the declaratively-constructed target cells, the const `src_poly` operand, the
+ranged clip → A_ij → A_j, and one observed `fn[x,y] = Σ_s A_ij·F_src_<fn> / A_j`
+per coupled field. `ns` = number of source cells. Returns (index_sets, variables)."
+function fields_regrid_spec(dom, ns::Int, field_names)
+    nx, ny, dx = dom.nx, dom.ny, dom.dx
+    xlo = dom.xmin - dx / 2
+    ylo = dom.ymin - dx / 2
     xstep(s) = _opd("*", s, _opd("+", _opd("==", "v", 2), _opd("==", "v", 3)))
     ystep(s) = _opd("*", s, _opd("+", _opd("==", "v", 3), _opd("==", "v", 4)))
     txc = _opd("+", xlo, _opd("*", _opd("-", "x", 1), dx), xstep(dx))
     tyc = _opd("+", ylo, _opd("*", _opd("-", "y", 1), dx), ystep(dx))
     tgt = _arrd(["x", "y", "v", "c"], ["x" => "gx", "y" => "gy", "v" => "verts", "c" => "coord"],
                 _opd("ifelse", _opd("==", "c", 1), txc, tyc))
-    sxc = _opd("+", xlo, _opd("*", _opd("-", "s", 1), dsx), xstep(dsx))
-    syc = _opd("+", ylo, ystep(dys))
-    src = _arrd(["s", "v", "c"], ["s" => "src_cells", "v" => "verts", "c" => "coord"],
-                _opd("ifelse", _opd("==", "c", 1), sxc, syc))
-    ip = Dict{String, Any}("op" => "intersect_polygon", "id" => "wind_clip", "manifold" => "planar",
+    ip = Dict{String, Any}("op" => "intersect_polygon", "id" => "regrid_clip", "manifold" => "planar",
         "args" => Any[_ixd("tgt_poly", "x", "y"), _ixd("src_poly", "s")])
     clip = _arrd(["x", "y", "s", "w", "c"],
         ["x" => "gx", "y" => "gy", "s" => "src_cells", "w" => "clip_ring", "c" => "coord"],
@@ -261,30 +283,34 @@ function wind_regrid_spec(dom; ns::Int = 3, uvals = collect(range(2.0, 8.0; leng
     A_ij = _arrd(["x", "y", "s"], ["x" => "gx", "y" => "gy", "s" => "src_cells"],
                  _aggd("v", "clip_ring", shoe))
     A_j  = _arrd(["x", "y"], ["x" => "gx", "y" => "gy"], _aggd("s", "src_cells", _ixd("A_ij", "x", "y", "s")))
-    num  = _aggd("s", "src_cells", _opd("*", _ixd("A_ij", "x", "y", "s"), _ixd("F_src", "s")))
-    u_x  = _arrd(["x", "y"], ["x" => "gx", "y" => "gy"], _opd("/", num, _ixd("A_j", "x", "y")))
     O(e, shape...) = Dict{String, Any}("type" => "observed", "shape" => collect(Any, shape), "expression" => e)
+    P(shape...) = Dict{String, Any}("type" => "parameter", "shape" => collect(Any, shape))
     isets = Dict{String, Any}(
         "coord" => Dict{String, Any}("kind" => "interval", "size" => 2),
         "verts" => Dict{String, Any}("kind" => "interval", "size" => 4),
         "gx" => Dict{String, Any}("kind" => "interval", "size" => nx),
         "gy" => Dict{String, Any}("kind" => "interval", "size" => ny),
         "src_cells" => Dict{String, Any}("kind" => "interval", "size" => ns),
-        "clip_ring" => Dict{String, Any}("kind" => "derived", "from_faq" => "wind_clip"))
+        "clip_ring" => Dict{String, Any}("kind" => "derived", "from_faq" => "regrid_clip"))
     vars = Dict{String, Any}(
-        "F_src" => Dict{String, Any}("type" => "parameter", "shape" => Any["src_cells"]),
         "tgt_poly" => O(tgt, "gx", "gy", "verts", "coord"),
-        "src_poly" => O(src, "src_cells", "verts", "coord"),
+        "src_poly" => P("src_cells", "verts", "coord"),
         "clip" => O(clip, "gx", "gy", "src_cells", "clip_ring", "coord"),
         "A_ij" => O(A_ij, "gx", "gy", "src_cells"),
-        "A_j" => O(A_j, "gx", "gy"),
-        "u_x" => O(u_x, "gx", "gy"))
-    return isets, vars, Float64[uvals...]
+        "A_j" => O(A_j, "gx", "gy"))
+    for fn in field_names
+        src_fn = "F_src_$fn"
+        num = _aggd("s", "src_cells", _opd("*", _ixd("A_ij", "x", "y", "s"), _ixd(src_fn, "s")))
+        vars[src_fn] = P("src_cells")
+        vars[fn] = O(_arrd(["x", "y"], ["x" => "gx", "y" => "gy"], _opd("/", num, _ixd("A_j", "x", "y"))),
+                     "gx", "gy")
+    end
+    return isets, vars
 end
 
 "Recursively replace every bare operand equal to `name` (a string) in a JSON-AST
-node with `repl`. Used to turn the discretized equation's bare `u_x` reference
-into index(u_x, <loop vars>)."
+node with `repl`. Used to turn each discretized equation's bare field reference
+(`u_x`, `dzdy`, …) into index(field, <loop vars>)."
 function _replace_bare(node, name, repl)
     if node isa AbstractDict
         out = Dict{String, Any}()
@@ -299,27 +325,36 @@ function _replace_bare(node, name, repl)
     end
 end
 
-"Attach the wind regrid to the discretized level-set esm: rewrite the bare `u_x`
-in each equation to index(u_x, <output loop vars>), merge the regrid index_sets
-and variables, and replace the array-input `u_x` with the regrid observed. Returns
-(esm_dict, F_src) ready for build_evaluator(...; param_arrays=Dict(\"F_src\"=>F_src))."
-function couple_wind(disc, dom; ns::Int = 3, uvals = collect(range(2.0, 8.0; length = ns)))
+"Attach the multi-field regrid to the discretized level-set esm: for each coupled
+field rewrite its bare reference to index(field, <output loop vars>), merge the
+regrid index_sets and variables, and drop the array-input parameters. Returns
+(esm_dict, const_arrays, param_arrays) for build_evaluator: `const_arrays` carries
+the source polygons, `param_arrays` the live per-field source buffers."
+function couple_fields(disc, dom, src_poly, field_src::AbstractDict)
     esm = JSON3.read(JSON3.write(disc), Dict{String, Any})   # mutable copy
     model = first(values(esm["models"]))
+    fields = collect(keys(field_src))
     for eq in model["equations"]
         rhs = eq["rhs"]
         oidx = rhs isa AbstractDict ? get(rhs, "output_idx", nothing) : nothing
         loop = oidx === nothing ? Any["i", "j"] : Any[String(s) for s in oidx]
-        repl = Dict{String, Any}("op" => "index", "args" => Any["u_x", loop...])
-        eq["rhs"] = _replace_bare(rhs, "u_x", repl)
+        for fn in fields
+            repl = Dict{String, Any}("op" => "index", "args" => Any[fn, loop...])
+            eq["rhs"] = _replace_bare(eq["rhs"], fn, repl)
+        end
     end
-    isets, rvars, F_src = wind_regrid_spec(dom; ns = ns, uvals = uvals)
+    ns = size(src_poly, 1)
+    isets, rvars = fields_regrid_spec(dom, ns, fields)
     model["index_sets"] = Base.merge(get(model, "index_sets", Dict{String, Any}()), isets)
-    delete!(model["variables"], "u_x")     # was the array-input parameter
+    for fn in fields
+        delete!(model["variables"], fn)     # was the array-input parameter
+    end
     for (k, v) in rvars
         model["variables"][k] = v
     end
-    return esm, F_src
+    const_arrays = Dict{String, Any}("src_poly" => src_poly)
+    param_arrays = Dict{String, Any}("F_src_$fn" => Float64[field_src[fn]...] for fn in fields)
+    return esm, const_arrays, param_arrays
 end
 
 # ---------------------------------------------------------------------------
@@ -353,8 +388,22 @@ end
 function main(args = ARGS)
     seconds, r0, wind = parse_cli(args)
     dom = camp_domain(CAMP_FIRE_ESM)
-    wind_ns = 3
-    wind_uvals = collect(range(2.0, 8.0; length = wind_ns))   # west→east midflame-wind ramp (m/s)
+    # Coupled source fields on a coarse 3×3 source grid (the demo forcing): an
+    # eastward midflame-wind ramp (W→E, drives φ_W) and an upslope terrain gradient
+    # (S→N, drives φ_S). u_y / dzdx are wired to zero — proving all four fields plumb
+    # through the same regrid, two with a visible, separable effect on the front.
+    nsx = nsy = 3
+    ux_col   = collect(range(2.0, 8.0; length = nsx))    # W→E midflame wind (m/s)
+    dzdy_row = collect(range(0.0, 0.5; length = nsy))    # S→N terrain slope (rise/run)
+    sx_of(s) = ((s - 1) % nsx) + 1
+    sy_of(s) = ((s - 1) ÷ nsx) + 1
+    ns_src = nsx * nsy
+    field_src = Dict(
+        "u_x"  => [ux_col[sx_of(s)] for s in 1:ns_src],
+        "u_y"  => zeros(ns_src),
+        "dzdx" => zeros(ns_src),
+        "dzdy" => [dzdy_row[sy_of(s)] for s in 1:ns_src])
+    phi_s_coeff = 5.275                                   # slope-factor coeff (β=1); 0 disables φ_S
 
     println("Camp Fire — thin Julia driver " *
             "(load camp_fire.esm -> discretize via ESS.jl -> run via tree-walk + Tsit5)\n")
@@ -396,14 +445,18 @@ function main(args = ARGS)
     esm = levelset_pde_esm(ls_path, dom; wind = wind)
     disc = discretize(esm)
     sysclass = get(disc["metadata"], "system_class", "?")
+    local wind_ca, wind_pa
     if wind
-        # Attach the declarative conservative wind regrid to the discretized core:
-        # u_x[x,y] = regrid(F_src) is built through build_evaluator (clip → A_ij →
-        # A_j → u_x, inlined per cell) and feeds U_n → φ_W → S_n → D(psi,t).
-        disc, wind_Fsrc = couple_wind(disc, dom; ns = wind_ns, uvals = wind_uvals)
+        # Attach the declarative conservative regrid (shared geometry, one field per
+        # coupled input) to the discretized core: each field[x,y] = regrid(F_src_field)
+        # is built through build_evaluator (clip → A_ij → A_j → field, inlined per
+        # cell) and feeds U_n/tan_phi_n → φ_W/φ_S → S_n → D(psi,t).
+        src_poly, _, _ = source_grid_lcc(dom; nsx = nsx, nsy = nsy)
+        disc, wind_ca, wind_pa = couple_fields(disc, dom, src_poly, field_src)
         println("   level-set PDE -> $sysclass; $(dom.nx * dom.ny) ODE states + declarative " *
-                "wind regrid ($(wind_ns) src cells, u_x ramp $(round(first(wind_uvals); digits=1))" *
-                "→$(round(last(wind_uvals); digits=1)) m/s W→E), R_0=$(r0) m/s")
+                "$(nsx)×$(nsy)-cell conservative regrid of $(length(COUPLED_FIELDS)) fields " *
+                "(u_x $(round(first(ux_col);digits=1))→$(round(last(ux_col);digits=1)) m/s W→E, " *
+                "dzdy 0→$(round(last(dzdy_row);digits=2)) S→N), R_0=$(r0) m/s, φ_s=$(phi_s_coeff)")
     else
         println("   level-set PDE -> $sysclass; $(dom.nx * dom.ny) ODE states " *
                 "(Rothermel/wind/slope coupling held at constants, R_0=$(r0) m/s)")
@@ -413,8 +466,8 @@ function main(args = ARGS)
     #    IC, evaluated per cell. Loaders/coupling held at representative constants.
     println("== run (ESS build_evaluator; Tsit5); tspan=(0, $(round(seconds; digits = 0)) s) ==")
     f!, u0, p, _tspan, var_map = wind ?
-        build_evaluator(disc; parameter_overrides = Dict("R_0" => r0),
-                        param_arrays = Dict("F_src" => wind_Fsrc)) :
+        build_evaluator(disc; parameter_overrides = Dict("R_0" => r0, "phi_s_coeff" => phi_s_coeff),
+                        const_arrays = wind_ca, param_arrays = wind_pa) :
         build_evaluator(disc; parameter_overrides = Dict("R_0" => r0))
     X(i) = dom.xmin + (i - 1) * dom.dx
     Y(j) = dom.ymin + (j - 1) * dom.dx
@@ -456,21 +509,27 @@ function main(args = ARGS)
             "$(round(burned(u0); digits = 2)) -> $(round(burned(sol.u[end]); digits = 2)) cells " *
             "(smooth), psi<0 cells $burn0 -> $burn1")
     if wind
-        # The regridded eastward wind must enhance the DOWNWIND (east) front
-        # (U_n = u_x·ψ_x/|∇ψ| > 0) and leave the UPWIND (west) front at R_0
-        # (U_n < 0 ⇒ max(0,U_n)=0). Split the front band at the ignition column to
-        # show the regrid-driven anisotropy is real, not a uniform speed-up.
+        # Each regridded field must drive its own front anisotropy: the eastward
+        # wind enhances the DOWNWIND (east) front (U_n>0) and the upslope gradient
+        # enhances the UPHILL (north) front (tan_phi_n>0); the opposite sides stay
+        # at ≈R_0 (max(0,·)=0). Split the front band about the ignition cell on each
+        # axis to show the regrid-driven anisotropy is real and per-field separable.
+        # The eastward wind (the dominant field) enhances the DOWNWIND/E front
+        # (U_n>0) and leaves the UPWIND/W front at ≈R_0 (max(0,U_n)=0) — the clean,
+        # field-driven anisotropy. (Slope is ~100× weaker than wind here and the
+        # ignition circle is only ~1.5 cells across, so the two fields can't be
+        # separated spatially on one run; verify_coupling.jl ablates each in turn.)
         i0 = round(Int, (-2000072.1 - dom.xmin) / dom.dx) + 1
-        ew(side) = [(-du0[var_map["psi[$i,$j]"]]) for i in 1:dom.nx, j in 1:dom.ny
-                    if haskey(var_map, "psi[$i,$j]") &&
-                       abs(u0[var_map["psi[$i,$j]"]]) <= dom.dx && side(i, i0)]
-        e = ew((i, i0) -> i > i0); w = ew((i, i0) -> i < i0)
-        em = isempty(e) ? NaN : sum(e) / length(e)
-        wm = isempty(w) ? NaN : sum(w) / length(w)
-        println("   wind anisotropy (regridded u_x $(round(first(wind_uvals);digits=1))→" *
-                "$(round(last(wind_uvals);digits=1)) m/s W→E): downwind/E front " *
-                "~$(round(em; digits = 2)) m/s vs upwind/W front ~$(round(wm; digits = 2)) m/s " *
-                "(≈R_0) — the regridded met field drives the front per cell")
+        spd(i, j) = -du0[var_map["psi[$i,$j]"]]
+        infront(i, j) = haskey(var_map, "psi[$i,$j]") && abs(u0[var_map["psi[$i,$j]"]]) <= dom.dx
+        half(sel) = (v = [spd(i, j) for i in 1:dom.nx, j in 1:dom.ny if infront(i, j) && sel(i, j)];
+                     isempty(v) ? NaN : sum(v) / length(v))
+        eE = half((i, j) -> i > i0); eW = half((i, j) -> i < i0)
+        fieldlist = join(COUPLED_FIELDS, ",")
+        println("   $(length(COUPLED_FIELDS)) fields coupled through the regrid " *
+                "($fieldlist). wind anisotropy (u_x W→E): downwind/E " *
+                "~$(round(eE;digits=2)) m/s vs upwind/W ~$(round(eW;digits=2)) m/s (≈R_0) — " *
+                "the regridded field drives the front per cell (per-field ablation: verify_coupling.jl)")
     end
     return 0
 end
