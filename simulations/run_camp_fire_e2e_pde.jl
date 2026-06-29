@@ -41,20 +41,27 @@ gaps — it does not pretend to reproduce the fire:
     coupling inputs are scalar in the core; `--wind` couples ONE met field for
     real — see below.
 
-  * `--wind` — MET→FIRE COUPLING (the first data-driven field wired end-to-end
-    through the evaluator). A declarative conservative regrid (clip → A_ij → A_j
-    → u_x, computed THROUGH `build_evaluator` with no host-supplied geometry; the
-    cell polygons are CONSTRUCTED from the grid origin/spacing) maps a surface
-    eastward-wind field onto the fire grid as a per-cell `u_x[x,y]`, which feeds
-    `U_n → φ_W → S_n → D(psi,t)`. discretize() keeps `u_x` as a grid-shaped INPUT;
-    the driver rewrites the bare reference to `index(u_x,i,j)` and attaches the
-    regrid, then the evaluator inlines it per cell (the ess-14f.4 coupled-array
-    bridge). The front is wind-elongated DOWNWIND (east, U_n>0) and stays at R_0
-    UPWIND (west, U_n<0). The source wind here is a coarse W→E ramp in the fire's
-    OWN LCC frame; swapping in ERA5's lat/lon grid + reprojection + live loader
-    data (and routing through camp_fire.esm's ERA5uRegrid/MidflameWind components,
-    rather than this driver-built regrid) is the remaining "add the rest" step —
-    the regrid machinery is identical.
+  * `--wind` — MET→FIRE COUPLING (data-driven fields wired end-to-end through the
+    evaluator). A declarative conservative regrid (clip → A_ij → A_j → field,
+    computed THROUGH `build_evaluator` with NO host-supplied geometry; the fire-grid
+    target cells are CONSTRUCTED from the grid origin/spacing) maps source fields
+    onto the fire grid as per-cell arrays. All four coupled inputs go through one
+    shared geometry: wind `u_x,u_y` (→ `U_n → φ_W`) and slope `dzdx,dzdy`
+    (→ `tan_phi_n → φ_S`), feeding `S_n → D(psi,t)`. discretize() keeps each as a
+    grid-shaped INPUT; the driver rewrites the bare reference to `index(field,i,j)`
+    and attaches the regrid, then the evaluator inlines it per cell (the ess-14f.4
+    coupled-array bridge). The front is wind-elongated DOWNWIND (east, U_n>0) and
+    upslope (north); the opposite sides stay at ≈R_0 (max(0,·)=0). Per-field
+    ablation: `verify_coupling.jl`.
+
+  * `--era5` — real ERA5 GRID. Instead of a coarse LCC-frame source, build the
+    actual ERA5 0.25° lat/lon grid covering the domain (inverse-LCC the domain
+    extent → snap to 0.25° → forward-LCC each cell's corners; the round-trip is
+    self-consistent) and conservatively regrid from it. Verified mass-conservative:
+    Σ A_j = the fire-domain area to ~100% (tiny sliver loss at cells straddling an
+    ERA5 boundary). The source *values* are still the demo ramps — feeding LIVE
+    ERA5/LANDFIRE data into the F_src buffers (the EarthSciIO loader path), and
+    routing through camp_fire.esm's own regrid components, is the remaining step.
 
 The integration window is SHORT by design (the Python `--seconds` analogue): the
 goal is to drive the real pipeline and surface feasibility, not to reproduce the
@@ -62,7 +69,7 @@ goal is to drive the real pipeline and surface feasibility, not to reproduce the
 
 USAGE
     EARTHSCISERIALIZATION=.../EarthSciSerialization \\
-        julia simulations/run_camp_fire_e2e_pde.jl [--seconds 30] [--r0 0.71] [--wind]
+        julia simulations/run_camp_fire_e2e_pde.jl [--seconds 30] [--r0 0.71] [--wind|--era5]
 
 `EARTHSCISERIALIZATION` defaults to a sibling `../EarthSciSerialization` checkout.
 The script activates that package's `scripts/pde_sim_adapter` project (which pins
@@ -257,6 +264,76 @@ function source_grid_lcc(dom; nsx::Int = 3, nsy::Int = 3)
     return sp, nsx, nsy
 end
 
+# --- Spherical secant Lambert Conformal Conic (the same projection as
+#     reprojection/lambert_conformal.esm: lat_1=30, lat_2=60, lat_0=39, lon_0=-97),
+#     used host-side to reproject a real ERA5 lat/lon source grid into the fire's
+#     LCC frame. R is the authalic sphere radius; the round-trip is self-consistent
+#     (same R both ways), so the reprojected ERA5 cells tile the fire domain exactly
+#     regardless of the spherical-vs-ellipsoidal approximation in absolute position.
+const _LCC_D = π / 180
+_lcc_params() = (lat1 = 30.0, lat2 = 60.0, lat0 = 39.0, lon0 = -97.0, R = 6371000.0)
+function _lcc_nF(p)
+    φ1, φ2 = p.lat1 * _LCC_D, p.lat2 * _LCC_D
+    t(q) = tan(π / 4 + q / 2)
+    n = log(cos(φ1) / cos(φ2)) / log(t(φ2) / t(φ1))
+    F = cos(φ1) * t(φ1)^n / n
+    return n, F, t(p.lat0 * _LCC_D)
+end
+function lcc_forward(lon, lat, p = _lcc_params())
+    n, F, t0 = _lcc_nF(p)
+    t(q) = tan(π / 4 + q / 2)
+    ρ0 = p.R * F / t0^n
+    ρ = p.R * F / t(lat * _LCC_D)^n
+    θ = n * (lon - p.lon0) * _LCC_D
+    return (ρ * sin(θ), ρ0 - ρ * cos(θ))
+end
+function lcc_inverse(x, y, p = _lcc_params())
+    n, F, t0 = _lcc_nF(p)
+    ρ0 = p.R * F / t0^n
+    ρ = sign(n) * sqrt(x^2 + (ρ0 - y)^2)
+    θ = atan(x, ρ0 - y)
+    lon = p.lon0 + θ / n / _LCC_D
+    φ = 2 * atan((p.R * F / ρ)^(1 / n)) - π / 2
+    return (lon, φ / _LCC_D)
+end
+
+"Real ERA5 lat/lon source grid (`dll`° cells, 0.25° = the ERA5 surface resolution)
+covering the fire domain, each cell's lon/lat corners reprojected to the fire's LCC
+frame. The domain's LCC extent is inverse-projected to lat/lon, snapped to the ERA5
+grid, then each ERA5 cell's corners are forward-projected to LCC. Returns (src_poly
+[ns,4,2] in LCC m, nlon, nlat, cell_lons, cell_lats); s = (ilat-1)*nlon + ilon."
+function source_grid_era5(dom; dll::Float64 = 0.25)
+    dx = dom.dx
+    xlo, ylo = dom.xmin - dx / 2, dom.ymin - dx / 2
+    xhi = dom.xmin + (dom.nx - 1) * dx + dx / 2
+    yhi = dom.ymin + (dom.ny - 1) * dx + dx / 2
+    # Sample the LCC boundary densely (not just the 4 corners): in lat/lon the domain
+    # edges bow, so a 4-corner bbox can clip a sliver of an edge fire cell. Sampling
+    # the perimeter captures the bowing, so the snapped ERA5 grid covers every cell.
+    lons = Float64[]; lats = Float64[]
+    for f in range(0.0, 1.0; length = 21)
+        for (x, y) in ((xlo + f*(xhi-xlo), ylo), (xlo + f*(xhi-xlo), yhi),
+                       (xlo, ylo + f*(yhi-ylo)), (xhi, ylo + f*(yhi-ylo)))
+            lo, la = lcc_inverse(x, y); push!(lons, lo); push!(lats, la)
+        end
+    end
+    lo0 = floor(minimum(lons) / dll) * dll; lo1 = ceil(maximum(lons) / dll) * dll
+    la0 = floor(minimum(lats) / dll) * dll; la1 = ceil(maximum(lats) / dll) * dll
+    nlon = Int(round((lo1 - lo0) / dll)); nlat = Int(round((la1 - la0) / dll))
+    ns = nlon * nlat
+    sp = zeros(ns, 4, 2); clons = zeros(ns); clats = zeros(ns)
+    for ilat in 1:nlat, ilon in 1:nlon
+        s = (ilat - 1) * nlon + ilon
+        a, b = lo0 + (ilon - 1) * dll, lo0 + ilon * dll       # lon edges
+        c, d = la0 + (ilat - 1) * dll, la0 + ilat * dll       # lat edges
+        for (k, (lo, la)) in enumerate(((a, c), (b, c), (b, d), (a, d)))
+            x, y = lcc_forward(lo, la); sp[s, k, 1] = x; sp[s, k, 2] = y
+        end
+        clons[s] = (a + b) / 2; clats[s] = (c + d) / 2
+    end
+    return sp, nlon, nlat, clons, clats
+end
+
 "Index_sets + variables for the SHARED-geometry conservative regrid onto the fire
 grid: the declaratively-constructed target cells, the const `src_poly` operand, the
 ranged clip → A_ij → A_j, and one observed `fn[x,y] = Σ_s A_ij·F_src_<fn> / A_j`
@@ -364,7 +441,8 @@ end
 function parse_cli(args)
     seconds = 30.0
     r0 = 0.71            # representative Anderson FM1 grass spread, ~3 m/s midflame wind
-    wind = false         # --wind: drive u_x from the declarative conservative regrid
+    wind = false         # --wind: drive the coupled fields from a coarse LCC-frame regrid
+    era5 = false         # --era5: use the real ERA5 0.25° lat/lon grid reprojected to LCC
     i = 1
     while i <= length(args)
         a = args[i]
@@ -378,31 +456,36 @@ function parse_cli(args)
             r0 = parse(Float64, split(a, "=", limit = 2)[2]); i += 1
         elseif a == "--wind"
             wind = true; i += 1
+        elseif a == "--era5"
+            era5 = true; wind = true; i += 1     # --era5 implies the coupled run
         else
             i += 1
         end
     end
-    (seconds, r0, wind)
+    (seconds, r0, wind, era5)
 end
 
 function main(args = ARGS)
-    seconds, r0, wind = parse_cli(args)
+    seconds, r0, wind, era5 = parse_cli(args)
     dom = camp_domain(CAMP_FIRE_ESM)
-    # Coupled source fields on a coarse 3×3 source grid (the demo forcing): an
-    # eastward midflame-wind ramp (W→E, drives φ_W) and an upslope terrain gradient
-    # (S→N, drives φ_S). u_y / dzdx are wired to zero — proving all four fields plumb
-    # through the same regrid, two with a visible, separable effect on the front.
-    nsx = nsy = 3
-    ux_col   = collect(range(2.0, 8.0; length = nsx))    # W→E midflame wind (m/s)
-    dzdy_row = collect(range(0.0, 0.5; length = nsy))    # S→N terrain slope (rise/run)
-    sx_of(s) = ((s - 1) % nsx) + 1
-    sy_of(s) = ((s - 1) ÷ nsx) + 1
-    ns_src = nsx * nsy
+    # Source grid for the coupled fields: the REAL ERA5 0.25° lat/lon grid reprojected
+    # into the fire's LCC frame (--era5), or a coarse LCC-frame grid for the plain
+    # --wind demo. Either way it tiles the fire domain; the conservative regrid onto
+    # the fire grid is identical. Coupled forcing (the demo values): an eastward
+    # midflame-wind ramp (W→E, drives φ_W) and an upslope terrain gradient (S→N,
+    # drives φ_S); u_y/dzdx are zero — proving all four fields plumb through one regrid.
+    src_poly, ncol, nrow, src_lons, src_lats = era5 ?
+        source_grid_era5(dom) : ((sp, c, r) = source_grid_lcc(dom; nsx = 3, nsy = 3); (sp, c, r, nothing, nothing))
+    ns_src = ncol * nrow
+    ux_col   = collect(range(2.0, 8.0; length = ncol))   # W→E midflame wind (m/s)
+    dzdy_row = collect(range(0.0, 0.5; length = nrow))   # S→N terrain slope (rise/run)
+    col_of(s) = ((s - 1) % ncol) + 1
+    row_of(s) = ((s - 1) ÷ ncol) + 1
     field_src = Dict(
-        "u_x"  => [ux_col[sx_of(s)] for s in 1:ns_src],
+        "u_x"  => [ux_col[col_of(s)] for s in 1:ns_src],
         "u_y"  => zeros(ns_src),
         "dzdx" => zeros(ns_src),
-        "dzdy" => [dzdy_row[sy_of(s)] for s in 1:ns_src])
+        "dzdy" => [dzdy_row[row_of(s)] for s in 1:ns_src])
     phi_s_coeff = 5.275                                   # slope-factor coeff (β=1); 0 disables φ_S
 
     println("Camp Fire — thin Julia driver " *
@@ -451,10 +534,14 @@ function main(args = ARGS)
         # coupled input) to the discretized core: each field[x,y] = regrid(F_src_field)
         # is built through build_evaluator (clip → A_ij → A_j → field, inlined per
         # cell) and feeds U_n/tan_phi_n → φ_W/φ_S → S_n → D(psi,t).
-        src_poly, _, _ = source_grid_lcc(dom; nsx = nsx, nsy = nsy)
         disc, wind_ca, wind_pa = couple_fields(disc, dom, src_poly, field_src)
+        srcdesc = era5 ?
+            "real ERA5 0.25° grid ($(ncol)×$(nrow) cells, lon[$(round(minimum(src_lons)-0.125;digits=2)),"*
+            "$(round(maximum(src_lons)+0.125;digits=2))] lat[$(round(minimum(src_lats)-0.125;digits=2)),"*
+            "$(round(maximum(src_lats)+0.125;digits=2))]) reprojected to LCC" :
+            "$(ncol)×$(nrow)-cell LCC-frame grid"
         println("   level-set PDE -> $sysclass; $(dom.nx * dom.ny) ODE states + declarative " *
-                "$(nsx)×$(nsy)-cell conservative regrid of $(length(COUPLED_FIELDS)) fields " *
+                "conservative regrid of $(length(COUPLED_FIELDS)) fields from a $srcdesc " *
                 "(u_x $(round(first(ux_col);digits=1))→$(round(last(ux_col);digits=1)) m/s W→E, " *
                 "dzdy 0→$(round(last(dzdy_row);digits=2)) S→N), R_0=$(r0) m/s, φ_s=$(phi_s_coeff)")
     else

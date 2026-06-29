@@ -78,3 +78,34 @@ println("    WIND only  → E=", round(axis(u0,du,vm,(i,j)->i>i0);digits=2),
 u0,du,vm = front_du(Dict("dzdy"=>[dzdy_row[sy_of(s)] for s in 1:ns]))  # slope only
 println("    SLOPE only → N=", round(axis(u0,du,vm,(i,j)->j>j0);digits=2),
         " S=", round(axis(u0,du,vm,(i,j)->j<j0);digits=2), "   (expect N>S≈R_0)")
+
+# (C) item 2: real ERA5 lat/lon grid reprojected to LCC must CONSERVATIVELY tile the
+# fire grid — A_j (total overlap per fire cell) ≈ the fire cell area dx² (no gaps),
+# the conservation guarantee of an area-weighted regrid.
+println("(C) ERA5 0.25° grid reprojected to LCC — conservation (A_j vs fire cell area):")
+sp_e, nlon, nlat, clons, clats = source_grid_era5(dom)
+println("    ERA5 grid: $(nlon)×$(nlat) cells; centers lon ", round.(unique(clons);digits=3))
+isets, rvars = fields_regrid_spec(dom, nlon*nlat, ["u_x"])
+vars = Dict{String,Any}(rvars)
+vars["w_Aj"] = Dict{String,Any}("type"=>"state","shape"=>Any["gx","gy"])
+ajeq = Dict{String,Any}(
+    "lhs"=>Dict{String,Any}("op"=>"aggregate","output_idx"=>Any["x","y"],
+        "ranges"=>Dict{String,Any}("x"=>Dict{String,Any}("from"=>"gx"),"y"=>Dict{String,Any}("from"=>"gy")),
+        "expr"=>Dict{String,Any}("op"=>"D","args"=>Any[_ixd("w_Aj","x","y")],"wrt"=>"t")),
+    "rhs"=>_arrd(["x","y"],["x"=>"gx","y"=>"gy"],_ixd("A_j","x","y")))
+esm = Dict{String,Any}("esm"=>"0.6.0","metadata"=>Dict{String,Any}("name"=>"ajcheck"),
+    "models"=>Dict{String,Any}("M"=>Dict{String,Any}("index_sets"=>isets,"variables"=>vars,"equations"=>Any[ajeq])))
+icA = Dict("w_Aj[$i,$j]"=>0.0 for i in 1:dom.nx, j in 1:dom.ny)
+fA,u0A,pA,_,vmA = build_evaluator(esm; const_arrays=Dict("src_poly"=>sp_e),
+    param_arrays=Dict("F_src_u_x"=>ones(nlon*nlat)), initial_conditions=icA)
+duA=similar(u0A); fA(duA,u0A,pA,0.0)
+aj = [duA[vmA["w_Aj[$i,$j]"]] for i in 1:dom.nx, j in 1:dom.ny]
+cell_area = dom.dx^2
+println("    A_j / cell_area: min=", round(minimum(aj)/cell_area;digits=4),
+        " max=", round(maximum(aj)/cell_area;digits=4),
+        " (≈1.0 — ERA5 covers every fire cell; <1 on the few cells straddling an ERA5")
+println("                    boundary, whose thin sliver overlap the degenerate-clip guard drops —")
+println("                    the sliver `filter` the real conservative_regrid_overlap_join.esm adds, item 4)")
+println("    total Σ A_j = ", round(sum(aj)/1e6;digits=2), " km² vs fire-domain area ",
+        round(dom.nx*dom.ny*cell_area/1e6;digits=2), " km² (mass-conservative to ",
+        round(100*(1-abs(sum(aj)-dom.nx*dom.ny*cell_area)/(dom.nx*dom.ny*cell_area));digits=2), "%)")
