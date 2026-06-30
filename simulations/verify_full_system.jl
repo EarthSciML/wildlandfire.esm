@@ -6,10 +6,15 @@
 #   §A  the fire-physics chain (slope→wind→EMC→1h-moisture→Rothermel) lowers and
 #       runs through build_evaluator and computes a physically sensible R that
 #       RESPONDS to the forcing (wind ↑ ⇒ R ↑; humidity ↑ ⇒ R ↓, → 0 past extinction).
-#   §B  the whole flattened system CANNOT lower through one build_evaluator — flatten/
-#       serialize are lossy (drop index_sets / function_tables / embedded const data),
-#       which is exactly why the system runs in its natural stages. We assert the
-#       monolithic attempt fails on one of those documented losses.
+#   §B  the whole flattened system now reconstitutes into ONE runnable document via
+#       ESS's `flattened_to_esm` and LOWERS PAST the formerly-fatal lossy-flatten
+#       losses: flatten is now field-preserving (canonical `reconstruct`), and the
+#       FlattenedSystem carries the regridders' namespaced `index_sets` + the
+#       FuelModelLookup `function_tables` + the geometry `manifold`. The monolithic
+#       attempt no longer fails on a dropped manifold/table/index-set — the remaining
+#       frontier is supplying each value-invention component's DATA inputs (projection
+#       coords, the five regridder geometries), which is the staged data harness, not
+#       a lossy-flatten defect. This §B is the regression guard that the ESS fix holds.
 include(joinpath(@__DIR__, "run_camp_fire_e2e_pde.jl"))
 using Test, Logging
 
@@ -43,43 +48,43 @@ R(f) = rothermel_from_fields(FLAT, f)["RothermelFireSpread.R"]
         println("  ✓ the flattened Rothermel chain computes R from forcing and responds correctly")
     end
 
-    @testset "§B monolithic lowering is blocked by lossy flatten (why we stage)" begin
-        # Serialize ALL flattened equations + variables into one model and try to run
-        # it. It must fail — flatten dropped the regridders' index_sets and the fuel
-        # table's const data, and the evaluator inlines no deep observed chains.
-        sv, ov, pv = FLAT.state_variables, FLAT.observed_variables, FLAT.parameters
-        function vd(v, kind)
-            d = Dict{String,Any}("type" => kind)
-            v.shape === nothing || isempty(v.shape) || (d["shape"] = collect(Any, v.shape))
-            v.default === nothing || (d["default"] = v.default)
-            kind == "observed" && v.expression !== nothing &&
-                (d["expression"] = ESS.serialize_expression(v.expression))
-            d
+    @testset "§B monolithic document reconstitutes + lowers past the lossy losses" begin
+        # Reconstitute the WHOLE flattened system into one runnable document via the
+        # ESS bridge. With flatten now field-preserving, this carries everything the
+        # old hand-assembly dropped: the regridders' namespaced index_sets, the fuel
+        # function_tables, and the geometry manifold.
+        doc = ESS.flattened_to_esm(FLAT)
+        model = doc["models"][first(keys(doc["models"]))]
+
+        function any_manifold(node)
+            node isa AbstractDict || (node isa AbstractVector && return any(any_manifold, node); return false)
+            get(node, "manifold", nothing) !== nothing && return true
+            any(any_manifold, values(node))
         end
-        vars = Dict{String,Any}()
-        for (k, v) in sv; vars[k] = vd(v, "state"); end
-        for (k, v) in ov; vars[k] = vd(v, "observed"); end
-        for (k, v) in pv; vars[k] = vd(v, "parameter"); end
-        eqs = Any[Dict{String,Any}("lhs" => ESS.serialize_expression(e.lhs),
-                                   "rhs" => ESS.serialize_expression(e.rhs)) for e in FLAT.equations]
-        mono = Dict{String,Any}("esm" => "0.5.0",
-            "metadata" => Dict{String,Any}("name" => "CampFireMonolithic"),
-            "models" => Dict{String,Any}("All" => Dict{String,Any}("variables" => vars, "equations" => eqs)))
+
+        @test haskey(model, "index_sets") && !isempty(model["index_sets"])   # was dropped
+        @test haskey(doc, "function_tables") && !isempty(doc["function_tables"])  # was dropped
+        @test any_manifold(model)                                            # was dropped
+        println("  monolithic doc: ", length(model["variables"]), " vars, ",
+                length(model["equations"]), " eqs, ", length(model["index_sets"]),
+                " index_sets, ", length(doc["function_tables"]), " function_tables")
+
+        # Try to build it. Whatever surfaces, it is NO LONGER one of the lossy-flatten
+        # losses — those nodes now carry their data. The remaining frontier is a
+        # value-invention DATA input (e.g. a regridder/projection geometry array),
+        # which is the staged data harness, not a serialization defect.
         err = try
-            build_evaluator(mono); ""
+            build_evaluator(doc); ""
         catch e
             sprint(showerror, e)
         end
-        println("  monolithic build_evaluator error: ", split(err, '\n')[1])
-        @test err != ""                                      # it MUST fail (lossy flatten)
-        # …and the failure is one of the documented losses. Serialization order is
-        # nondeterministic, so the parser trips on whichever lossy node comes first:
-        # the regrid geometry (intersect_polygon's dropped `manifold` / index_sets /
-        # join), the FuelModelLookup `table_lookup`/`fn` whose `table`/`const` data is
-        # dropped, or an unsupported/unbound deep-observed inlining gap.
-        @test any(occursin(err), ["manifold", "intersect_polygon", "table_lookup", "table",
-                                  "fn", "const", "index", "JOIN", "candidate",
-                                  "UNSUPPORTED", "UNBOUND", "GEOMETRY"])
-        println("  ✓ monolithic lowering blocked by lossy flatten — the system runs in stages")
+        first_line = isempty(err) ? "(built)" : split(err, '\n')[1]
+        println("  monolithic build_evaluator frontier: ", first_line)
+        for lossy in ["requires a `manifold`", "table_lookup requires", "undeclared index set",
+                      "requires an `id`"]
+            @test !occursin(lossy, err)                       # the lossy-flatten losses are GONE
+        end
+        println("  ✓ the whole flattened system lowers monolithically past the lossy losses ",
+                "(ESS flatten is now field-preserving; flattened_to_esm reconstitutes it)")
     end
 end

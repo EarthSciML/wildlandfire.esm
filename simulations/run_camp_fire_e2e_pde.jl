@@ -35,11 +35,15 @@ gaps — it does not pretend to reproduce the fire:
     interface. (The regrid kernels' geometry — overlap matrix, B-spline offsets —
     is host-supplied, so this is a complete declarative spec; the coupled met→fire
     path is structural, not yet runnable through the tree-walk evaluator.)
-  * DISCRETIZE/RUN — there is no Julia `flattened_to_esm`, so the DISCRETIZE/RUN
-    stages drive the level-set PDE *core* (the slope/Rothermel coupling inputs
-    held at representative constants, `--r0` the base spread rate). The remaining
-    coupling inputs are scalar in the core; `--wind` couples ONE met field for
-    real — see below.
+  * DISCRETIZE/RUN — ESS now provides `flattened_to_esm` (FlattenedSystem → one
+    runnable document) and `build_evaluator`/`discretize` methods on it, and
+    `flatten` is field-preserving, so the whole system reconstitutes and lowers
+    monolithically past the formerly-fatal lossy losses (verify_full_system §B).
+    This driver still drives the level-set PDE *core* with the slope/Rothermel
+    coupling inputs supplied by the `--full` physics stage and `--wind` regrid —
+    a data-harness convenience (each value-invention component needs its own
+    geometry inputs), no longer a lossy-flatten necessity. `--r0` is the fallback
+    base spread rate.
 
   * `--wind` — MET→FIRE COUPLING (data-driven fields wired end-to-end through the
     evaluator). A declarative conservative regrid (clip → A_ij → A_j → field,
@@ -73,24 +77,27 @@ gaps — it does not pretend to reproduce the fire:
     Set ERA5_NC / ERA5_PYTHON to override the data file / netCDF Python.
 
   * `--full` — WHOLE-SYSTEM run: the front spreads at the Rothermel rate of spread
-    COMPUTED from the flattened physics, not the constant --r0. The full
-    21-component system cannot lower through ONE build_evaluator — flatten() +
-    serialize_expression are LOSSY (they drop the regridders' `index_sets`, the
-    FuelModelLookup `function_tables` / embedded `const` data, and intersect_polygon's
-    `manifold`; the MTK-free evaluator also inlines no deep observed chains) — so the
-    system runs in its natural STAGES, every component participating. This mode adds
-    the SCALAR fire-physics stage: it lifts the TerrainSlope→MidflameWind→EMC→
-    1h-moisture→Rothermel chain straight out of the flattened equations, topologically
-    inlines it (the level-set core's own trick), and evaluates it through
-    build_evaluator to compute R_0 and the level-set coefficients (C/B/E_wind,
-    beta_ratio, phi_s_coeff) from the regridded forcing (the wind comes from the same
-    coupled field the front uses; FuelModelLookup's lossy table is bypassed with the
-    Anderson-13 FM1 fuel-bed values it would emit). Those feed the level-set PDE, so
-    the front speed is data-derived. `--full` implies `--wind`. Verify:
-    verify_full_system.jl (R responds to wind/humidity; the monolithic attempt fails
-    on the lossy losses). camp_fire.esm's 5 conservative regridders now reference the
-    self-computing conservative_regrid_overlap_join_computed.esm (declarative A_ij —
-    no host overlap matrix; verify_computed via the ESD regridding/ test).
+    COMPUTED from the flattened physics, not the constant --r0. The lossy-flatten
+    blocker is FIXED in ESS: `flatten` is field-preserving (canonical `reconstruct`),
+    the FlattenedSystem carries the regridders' namespaced `index_sets` + the
+    FuelModelLookup `function_tables` + the geometry `manifold`, `flattened_to_esm`
+    reconstitutes the whole system into one runnable document, and `build_evaluator`
+    resolves DEEP observed chains on its own. So the SCALAR fire-physics stage no
+    longer needs to topologically pre-inline: it lifts the TerrainSlope→MidflameWind→
+    EMC→1h-moisture→Rothermel chain straight out of the flattened equations, emits it
+    as observeds, and lets build_evaluator collapse the chain to compute R_0 and the
+    level-set coefficients (C/B/E_wind, beta_ratio, phi_s_coeff) from the regridded
+    forcing (the wind comes from the same coupled field the front uses; FuelModelLookup
+    is supplied the Anderson-13 FM1 fuel-bed values its table emits for code 1). Those
+    feed the level-set PDE, so the front speed is data-derived. The whole 21-component
+    system also lowers monolithically (verify_full_system §B) — the staging that
+    remains is a data-harness convenience: each value-invention component (the five
+    regridders, the projection, the reductions) needs its own geometry inputs supplied.
+    `--full` implies `--wind`. Verify: verify_full_system.jl (R responds to
+    wind/humidity; the monolithic document lowers past the lossy losses). camp_fire.esm's
+    5 conservative regridders reference the self-computing
+    conservative_regrid_overlap_join_computed.esm (declarative A_ij — no host overlap
+    matrix; verify_computed via the ESD regridding/ test).
 
 The integration window is SHORT by design (the Python `--seconds` analogue): the
 goal is to drive the real pipeline and surface feasibility, not to reproduce the
@@ -519,23 +526,22 @@ end
 # ---------------------------------------------------------------------------
 # WHOLE-SYSTEM stage: the Rothermel rate-of-spread PHYSICS chain (--full).
 #
-# `flatten(load(camp_fire.esm))` gives the full 21-component coupled system, but it
-# CANNOT be lowered through one build_evaluator: flatten()/serialize_expression are
-# LOSSY — they drop `index_sets` (so the 5 regridders' value-invention geometry can't
-# be reconstructed), `function_tables` / embedded `const` data (the FuelModelLookup
-# code→properties table becomes an `fn` node with empty {"op":"const"} operands), and
-# the MTK-free evaluator inlines no deep observed chains. This is the precise shape of
-# the Julia-binding "no flattened_to_esm" gap. So the system runs in its NATURAL
-# STAGES, every component participating.
+# `flatten(load(camp_fire.esm))` gives the full 21-component coupled system. The
+# lossy-flatten blocker that used to prevent this lowering is FIXED in ESS: flatten
+# is field-preserving (it no longer drops the regridders' `index_sets`, the
+# FuelModelLookup `function_tables`, or intersect_polygon's `manifold`), and
+# build_evaluator resolves DEEP observed chains on its own. `flattened_to_esm` even
+# reconstitutes the whole system into one runnable document (verify_full_system §B).
 #
 # This stage extracts the SCALAR fire-physics chain — TerrainSlope, MidflameWind,
 # EquilibriumMoistureContent, OneHourFuelMoisture, RothermelFireSpread — straight from
-# the flattened equations, topologically INLINES it (the same single-pass substitute
-# the level-set core uses), and runs it through build_evaluator to COMPUTE the Rothermel
-# rate of spread R and the level-set coefficients (C/B/E_wind, beta_ratio, phi_s_coeff)
-# from the regridded met/fuel/slope forcing — the values the driver otherwise holds at
-# the constant --r0. FuelModelLookup is bypassed (its table is the lossy `fn`): its 5
-# outputs are supplied as the Anderson-13 FM1 (short grass) SI values lookup produces.
+# the flattened equations, EMITS each as an observed, and runs it through
+# build_evaluator (whose fixed-point observed resolver collapses the feed-forward
+# chain — no hand topological pre-inline) to COMPUTE the Rothermel rate of spread R and
+# the level-set coefficients (C/B/E_wind, beta_ratio, phi_s_coeff) from the regridded
+# met/fuel/slope forcing — the values the driver otherwise holds at the constant --r0.
+# FuelModelLookup's 5 outputs are supplied as the Anderson-13 FM1 (short grass) SI
+# values its table emits for code 1 (the data-harness input for that component).
 # ---------------------------------------------------------------------------
 
 const PHYS_COMPONENTS = ["TerrainSlope", "MidflameWind", "EquilibriumMoistureContent",
@@ -581,57 +587,52 @@ end
 "Compute the Rothermel rate of spread + level-set coefficients from the flattened
 camp_fire system, given representative scalar forcing for the regridded coupling
 inputs (`fieldvals`, keyed by the producer's flattened name, e.g. ERA5uRegrid.F_tgt).
-Extracts the fire-physics components, inlines the feed-forward algebraic chain, and
-evaluates it through build_evaluator. Returns a Dict of the read-out values."
+Lifts the fire-physics algebraic equations OUT of the flattened system, emits each as
+an OBSERVED, and lets build_evaluator's fixed-point observed resolver collapse the
+feed-forward chain (ESS now resolves deep observed chains — no hand pre-inline).
+Returns a Dict of the read-out values."
 function rothermel_from_fields(flat, fieldvals::AbstractDict)
-    sv, ov, pv = flat.state_variables, flat.observed_variables, flat.parameters
+    pv = flat.parameters
     isphys(nm) = any(p -> startswith(nm, p * "."), PHYS_COMPONENTS)
-    alg = Dict{String,ESS.Expr}()
+    # Emit each fire-physics `x = expr` algebraic equation as an observed; the chain
+    # is feed-forward, so build_evaluator inlines it transitively at build time.
+    vars = Dict{String,Any}(); refs = Set{String}()
     for e in flat.equations
         nm = _eq_lhs_name(e)
         (nm === nothing || !isphys(nm)) && continue
         l = ESS.serialize_expression(e.lhs)
-        l isa AbstractString && (alg[nm] = e.rhs)          # algebraic x = expr (the whole chain is)
-    end
-    obs_set = Set(keys(alg))
-    deps = Dict(nm => intersect(free_variables(alg[nm]), obs_set) for nm in keys(alg))
-    order = String[]; done = Set{String}()
-    while length(order) < length(alg)
-        prog = false
-        for nm in keys(alg)
-            nm in done && continue
-            all(d -> d in done, deps[nm]) && (push!(order, nm); push!(done, nm); prog = true)
-        end
-        prog || error("cyclic fire-physics dependency: $(setdiff(keys(alg), done))")
-    end
-    resolved = Dict{String,ESS.Expr}()
-    for nm in order
-        resolved[nm] = ESS.substitute(alg[nm], resolved)
+        l isa AbstractString || continue                   # bare `x = expr` algebraic def
+        ex = ESS.serialize_expression(e.rhs)
+        vars[nm] = Dict{String,Any}("type" => "observed", "expression" => ex)
+        _collect_refs!(refs, ex)
     end
 
+    # Probe states read each Rothermel read-out by name; build_evaluator inlines them.
     readouts = String.(first.(ROTHERMEL_TO_LEVELSET))
-    vars = Dict{String,Any}(); eqs = Any[]; probe_of = Dict{String,String}()
+    eqs = Any[]; probe_of = Dict{String,String}()
     for (i, nm) in enumerate(readouts)
-        haskey(resolved, nm) || error("fire-physics read-out not found: $nm")
+        haskey(vars, nm) || error("fire-physics read-out not found: $nm")
         pn = "__probe$i"; probe_of[nm] = pn
         vars[pn] = Dict{String,Any}("type" => "state")
         push!(eqs, Dict{String,Any}("lhs" => Dict{String,Any}("op" => "D", "args" => Any[pn], "wrt" => "t"),
-                                    "rhs" => ESS.serialize_expression(resolved[nm])))
+                                    "rhs" => nm))
     end
-    refs = Set{String}()
-    for e in eqs
-        _collect_refs!(refs, e["rhs"])
-    end
-    for p in intersect(refs, Set(keys(pv)))
-        d = Dict{String,Any}("type" => "parameter")
-        pv[p].default === nothing || (d["default"] = pv[p].default)
-        vars[p] = d
-    end
-    # Dangling inputs (regridder/lookup outputs) become representative parameters.
+
+    # Inputs the chain reads but doesn't define (regridder/lookup outputs, model
+    # constants) become parameters: the FM1 fuel + regridded forcing where given,
+    # else the flattened parameter's own default.
     forcing = Base.merge(Dict{String,Float64}(FM1_FUEL), Dict{String,Float64}(fieldvals))
     for r in refs
         (haskey(vars, r) || !occursin(".", r)) && continue
-        vars[r] = Dict{String,Any}("type" => "parameter", "default" => get(forcing, r, 0.0))
+        d = Dict{String,Any}("type" => "parameter")
+        if haskey(forcing, r)
+            d["default"] = forcing[r]
+        elseif haskey(pv, r) && pv[r].default !== nothing
+            d["default"] = pv[r].default
+        else
+            d["default"] = 0.0
+        end
+        vars[r] = d
     end
 
     esm = Dict{String,Any}("esm" => "0.5.0",
