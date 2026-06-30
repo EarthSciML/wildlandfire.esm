@@ -58,8 +58,20 @@ fgrad_rules(dxn) = [
     Dict{String,Any}("name" => "gy", "pattern" => Dict{String,Any}("op" => "grad", "args" => Any["\$u"], "dim" => "y"),
         "replacement" => fcentered(fidxd(0, 1), fidxd(0, -1), dxn))]
 
-"Discretize the spatially-varying monolithic fire (verify_spatial_fire pipeline), keeping
-the 6 forcing as [x,y] parameter SEEDS for promotion. Returns (disc, arrnames, rsh)."
+"RothermelFireSpread.R's declared shape in the discretized doc — [x,y] confirms the scalar
+Rothermel chain was promoted to per-cell by the monolithic lowering."
+function rshape(disc)
+    for (_, m) in disc["models"]
+        v = get(get(m, "variables", Dict{String,Any}()), "RothermelFireSpread.R", nothing)
+        v === nothing && continue
+        sh = get(v, "shape", nothing)
+        return sh === nothing ? nothing : String[String(s) for s in sh]
+    end
+    return nothing
+end
+
+"Discretize the spatially-varying monolithic fire, keeping the 6 forcing as [x,y] parameter
+SEEDS; ESS's `discretize(...; promote=true)` does the monolithic lowering. Returns (disc, rsh)."
 function fire_discretized(dom)
     flat = with_logger(ConsoleLogger(stderr, Logging.Error)) do
         E.flatten(E.load(CAMP_FIRE_ESM))
@@ -84,41 +96,19 @@ function fire_discretized(dom)
         params[r] = MV(ESS.ParameterVariable; default = get(FM1, r, 0.0))
     end
 
-    lsdef = Dict{String,E.Expr}()
-    for eq in keepeq; eq.lhs isa E.VarExpr && fcomp(eq.lhs.name) == "LevelSetFireSpread" && (lsdef[eq.lhs.name] = eq.rhs); end
-    order = String[]; done = Set{String}()
-    while length(order) < length(lsdef)
-        prog = false
-        for nm in keys(lsdef)
-            nm in done && continue
-            all(d -> d in done, intersect(E.free_variables(lsdef[nm]), Set(keys(lsdef)))) && (push!(order, nm); push!(done, nm); prog = true)
-        end
-        prog || error("cyclic level-set observed")
-    end
-    resolved = Dict{String,E.Expr}(); for nm in order; resolved[nm] = E.substitute(lsdef[nm], resolved); end
-    keepeq2 = E.Equation[]
-    for eq in keepeq
-        if eq.lhs isa E.VarExpr && haskey(lsdef, eq.lhs.name); continue
-        elseif eq.lhs isa E.OpExpr && eq.lhs.op == "D" && fcomp(eq.lhs.args[1].name) == "LevelSetFireSpread"
-            push!(keepeq2, E.Equation(eq.lhs, E.substitute(eq.rhs, resolved); _comment = eq._comment, region = eq.region))
-        else; push!(keepeq2, eq); end
-    end
-    for nm in keys(lsdef); delete!(obs, nm); end
-
-    flat2 = E.FlattenedSystem(flat.independent_variables, states, params, obs, keepeq2,
+    flat2 = E.FlattenedSystem(flat.independent_variables, states, params, obs, keepeq,
         E.ContinuousEvent[], E.DiscreteEvent[], flat.domain, flat.metadata, flat.index_sets, flat.function_tables)
-    flat2 = E.algebraic_states_to_observeds(flat2)
-    prom = E.promote_downstream_shapes(flat2)
-    rsh = get(prom.observed_variables, "RothermelFireSpread.R", nothing)
 
     grids = Dict("g" => Dict{String,Any}("family" => "cartesian", "dimensions" => Any[
         Dict{String,Any}("name" => "x", "size" => dom.nx, "periodic" => false, "spacing" => "uniform"),
         Dict{String,Any}("name" => "y", "size" => dom.ny, "periodic" => false, "spacing" => "uniform")]))
-    disc = E.discretize(prom; grids = grids, rules = fgrad_rules("LevelSetFireSpread.dx"), strict_unrewritten = false)
-    arrnames = Set{String}(k for (k, v) in Base.merge(Dict(prom.parameters), Dict(prom.observed_variables))
-                           if v.shape !== nothing && !isempty(v.shape))
-    E.index_promoted_refs!(disc, arrnames)
-    return disc, arrnames, rsh
+    # ESS applies the WHOLE monolithic lowering via promote=true: inline the level-set's
+    # elementwise array observeds (psi_x/grad_mag/U_n/S_n…) into D(psi,t), reclassify the
+    # algebraic-state physics, promote the scalar Rothermel chain to [x,y], discretize the
+    # grad stencils, and index the per-cell refs — no driver-side fold / stage / index pass.
+    disc = E.discretize(flat2; grids = grids, rules = fgrad_rules("LevelSetFireSpread.dx"),
+                        strict_unrewritten = false, promote = true)
+    return disc, rshape(disc)
 end
 
 "Replace the 6 forcing PARAMETERS in the discretized doc with the conservative regridder
@@ -161,7 +151,7 @@ function main()
         "wu"   => [u_col[col_of(s)] for s in 1:ns], "wv" => zeros(ns),
         "sx"   => fill(0.05, ns),  "sy" => [sy_row[row_of(s)] for s in 1:ns])
 
-    disc, arrnames, rsh = fire_discretized(dom)
+    disc, rsh = fire_discretized(dom)
     const_arrays, param_arrays = merge_regridder!(disc, dom, src_poly, field_src)
 
     # ONE build_evaluator: regrid + promoted physics + level-set.
@@ -181,14 +171,14 @@ function main()
     println("Single-evaluator monolithic camp_fire (M2-5) — regrid + physics + level-set in ONE build_evaluator\n")
     println("  inputs to build_evaluator: src_poly (const) + ", length(field_src), " F_src buffers (param) — NO precomputed forcing arrays")
     println("  source grid: $(ncol)×$(nrow) LCC-frame cells → $(nx)×$(ny) = $(nx*ny) fire cells (clip → A_ij → A_j → apply, in-evaluator)")
-    println("  RothermelFireSpread.R shape after promotion: ", rsh === nothing ? "absent" : rsh.shape, "  (per-cell)")
+    println("  RothermelFireSpread.R shape after promotion: ", rsh === nothing ? "absent" : rsh, "  (per-cell)")
     println("  front cells: ", length(band))
     println("  front speed: min ", round(minimum(sp); digits = 4), " max ", round(maximum(sp); digits = 4),
             "  — varies per cell: ", maximum(sp) - minimum(sp) > 1e-4)
     println("  wind anisotropy (regridded W→E ramp): downwind/E ", round(em; digits = 4),
             " > upwind/W ", round(wm; digits = 4))
 
-    @assert rsh !== nothing && rsh.shape == ["x", "y"]  "Rothermel R must promote to [x,y]"
+    @assert rsh == ["x", "y"]                    "Rothermel R must promote to [x,y]"
     @assert !isempty(band)                       "expected a psi=0 front band"
     @assert maximum(sp) - minimum(sp) > 1e-4     "front speed must vary per cell"
     @assert em > wm                              "downwind front must be faster (regridded wind anisotropy)"
