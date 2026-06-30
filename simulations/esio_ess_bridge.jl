@@ -32,6 +32,7 @@ Usage (after `using EarthSciSerialization, EarthSciIO`; `include` this file):
 =#
 import EarthSciSerialization as ESS
 import EarthSciIO
+import Dates
 
 # --- adapter: EarthSciIO.Provider satisfies the ESS Provider protocol -------
 # These define methods on ESS's generics for EarthSciIO's type — the exact seam
@@ -91,4 +92,92 @@ function esio_provider(spec; cache::EarthSciIO.Cache = EarthSciIO.Cache())
                                             format = fmt, time_dim = g(:time_dim, nothing),
                                             common...)
     end
+end
+
+# --- to_esio_loader: a data-loader `.esm` block → an esio_provider spec --------
+# The Julia counterpart of the Python `earthsci_toolkit.data_loaders.esio_provider
+# .to_esio_loader`, for the common netcdf URL-template case (the LANDFIRE / USGS
+# ArcGIS `{bbox}`/image-size fills and the ERA5 CDS `area` request are the exotic
+# tail — a documented gap). It maps the loader's declared `source.url_template`,
+# `temporal` cadence, and `variables.<v>.file_variable` to the (url, format,
+# variables, time_dim, times) spec `esio_provider` consumes, so a loader becomes
+# a runnable Provider with no hand-written spec.
+
+"Infer the EarthSciIO format key from a loader URL + metadata (mirrors Python `_esio_format`)."
+function _esio_format(url::AbstractString, metadata::AbstractDict = Dict{String,Any}())
+    haskey(metadata, "esio_format") && return String(metadata["esio_format"])
+    u = lowercase(url)
+    (endswith(u, ".tif") || endswith(u, ".tiff") || occursin("format=tiff", u)) && return "geotiff"
+    (endswith(u, ".nc") || occursin("format=netcdf", u)) && return "netcdf"
+    ff = lowercase(String(get(metadata, "file_format", "")))
+    ff in ("geotiff", "tiff", "tif") && return "geotiff"
+    ff in ("netcdf", "nc") && return "netcdf"
+    error("to_esio_loader: cannot infer an EarthSciIO format for url '$url'; " *
+          "set the loader metadata.esio_format (e.g. \"netcdf\")")
+end
+
+# ISO-8601 duration → seconds, for the common cadence units (PT…H/M/S, P…D).
+# Calendar-length units (months/years) are returned as their nominal second count
+# (30 d / 365 d) — adequate for a cadence grid, exact for the PT…H ERA5 case.
+function _iso8601_seconds(s::AbstractString)
+    m = match(r"^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$", String(s))
+    m === nothing && error("to_esio_loader: cannot parse ISO-8601 duration '$s'")
+    n(i) = m.captures[i] === nothing ? 0 : parse(Int, m.captures[i])
+    return n(1)*365*86400 + n(2)*30*86400 + n(3)*86400 + n(4)*3600 + n(5)*60 + n(6)
+end
+
+# Expand a `{date:%Y}`-style URL template at `dt` (the strftime fills the Python
+# loader URLs use). Maps the common %-codes to Julia `Dates.format` codes.
+function _expand_date_template(tpl::AbstractString, dt::Dates.DateTime)
+    return replace(tpl, r"\{date:([^}]+)\}" => m -> begin
+        fmt = match(r"\{date:([^}]+)\}", m).captures[1]
+        for (pc, jc) in ("%Y" => "yyyy", "%m" => "mm", "%d" => "dd",
+                         "%H" => "HH", "%M" => "MM", "%S" => "SS")
+            fmt = replace(fmt, pc => jc)
+        end
+        Dates.format(dt, fmt)
+    end)
+end
+
+"""
+    to_esio_loader(loader; anchor=nothing, times=nothing) -> NamedTuple spec
+
+Map a single data-loader block (the `data_loaders.<name>` object from a loader
+`.esm` — `source.url_template` + `temporal` + `variables`) to an
+[`esio_provider`](@ref) spec. `anchor::Dates.DateTime` resolves a `{date:…}` URL
+template to a concrete URL (else the raw template is returned, for a caller-built
+`t -> url`). `times` overrides the cadence; otherwise it is built from the
+loader's `temporal` (`start` + `frequency` over `records_per_file`, or a single
+const sample when there is no cadence). The returned spec has `url`, `format`,
+`variables` (the file-variable names), `time_dim`, and `times`.
+"""
+function to_esio_loader(loader::AbstractDict; anchor::Union{Nothing,Dates.DateTime} = nothing,
+                        times = nothing, n_records::Union{Nothing,Int} = nothing)
+    src = get(loader, "source", nothing)
+    src === nothing && error("to_esio_loader: loader has no `source` block")
+    tpl = String(get(src, "url_template", get(src, "url", "")))
+    isempty(tpl) && error("to_esio_loader: loader source has no `url_template`/`url`")
+    meta = get(loader, "metadata", Dict{String,Any}())
+    fmt = _esio_format(tpl, meta)
+
+    vars = get(loader, "variables", Dict{String,Any}())
+    file_vars = String[String(get(v, "file_variable", k)) for (k, v) in vars]
+
+    temporal = get(loader, "temporal", nothing)
+    time_dim = temporal === nothing ? nothing :
+        (tv = get(temporal, "time_variable", nothing); tv === nothing ? nothing : String(tv))
+
+    # Cadence: explicit `times`, else a uniform grid from temporal.frequency.
+    cadence = times
+    if cadence === nothing && temporal !== nothing && haskey(temporal, "frequency")
+        step = _iso8601_seconds(String(temporal["frequency"]))
+        nrec = n_records !== nothing ? n_records : Int(get(temporal, "records_per_file", 1))
+        cadence = Float64[(i - 1) * step for i in 1:nrec]
+    end
+
+    url = anchor === nothing ? tpl :
+          (occursin("{date:", tpl) ? _expand_date_template(tpl, anchor) : tpl)
+
+    return (; url = url, format = fmt, variables = file_vars,
+            time_dim = time_dim, times = cadence)
 end
