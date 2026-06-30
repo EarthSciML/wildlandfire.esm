@@ -139,8 +139,54 @@ function _expand_date_template(tpl::AbstractString, dt::Dates.DateTime)
     end)
 end
 
+# Domain-derived URL fills (the Python `to_esio_loader`'s `target`/CDS tail): the
+# server-side-subsetting GeoTIFF loaders (LANDFIRE / USGS 3DEP ArcGIS ImageServer)
+# carry `{bbox_*_deg}` + `{image_*}` placeholders the simulation domain fills, and a
+# CDS loader (ERA5) carries `metadata.cds.dataset` whose request `area` comes from the
+# domain bbox. `target = (min_lon, min_lat, max_lon, max_lat)` is the fire grid's lon/lat
+# envelope (e.g. `_domain_lonlat_bbox(dom)`).
+
+"Fill static `{key}` placeholders (e.g. `{version}`, `{product}`) from a defaults dict."
+function _fill_consts(tpl::AbstractString, defaults::AbstractDict)
+    out = String(tpl)
+    for (k, v) in defaults
+        out = replace(out, "{$(String(k))}" => string(v))
+    end
+    return out
+end
+
+"Fill the ArcGIS ImageServer `exportImage` domain placeholders — the WGS84 bbox
+(`{bbox_west_deg}`,`{bbox_south_deg}`,`{bbox_east_deg}`,`{bbox_north_deg}`) and the
+requested raster `{image_width}`,`{image_height}` — from the target bbox + image size."
+function _fill_bbox(tpl::AbstractString, target, image_size)
+    target === nothing && return String(tpl)
+    minlon, minlat, maxlon, maxlat = target
+    out = replace(String(tpl),
+        "{bbox_west_deg}" => string(minlon), "{bbox_south_deg}" => string(minlat),
+        "{bbox_east_deg}" => string(maxlon), "{bbox_north_deg}" => string(maxlat))
+    if image_size !== nothing
+        out = replace(out, "{image_width}" => string(image_size[1]),
+                           "{image_height}" => string(image_size[2]))
+    end
+    return out
+end
+
+"ECMWF/CDS `area` = `[North, West, South, East]` from a `(min_lon,min_lat,max_lon,max_lat)` bbox."
+era5_area_from_bbox(target) = [target[4], target[1], target[2], target[3]]
+
+"Build a `cds://<dataset>?area=N/W/S/E&variable=…&…` request URL (the spec the ESIO `cds`
+transport submits) from the domain bbox + the loader's file variables and CDS metadata."
+function _cds_url(dataset, target, file_vars; levels = nothing, extra = Dict{String,Any}())
+    n, w, s, e = era5_area_from_bbox(target)
+    parts = ["dataset=$(dataset)", "area=$(n)/$(w)/$(s)/$(e)",
+             "variable=$(join(file_vars, ","))"]
+    levels === nothing || push!(parts, "pressure_level=$(join(levels, ","))")
+    for (k, v) in extra; push!(parts, "$(String(k))=$(v)"); end
+    return "cds://$(dataset)?" * join(parts, "&")
+end
+
 """
-    to_esio_loader(loader; anchor=nothing, times=nothing) -> NamedTuple spec
+    to_esio_loader(loader; anchor=nothing, times=nothing, target=nothing, image_size=nothing) -> NamedTuple spec
 
 Map a single data-loader block (the `data_loaders.<name>` object from a loader
 `.esm` — `source.url_template` + `temporal` + `variables`) to an
@@ -148,17 +194,24 @@ Map a single data-loader block (the `data_loaders.<name>` object from a loader
 template to a concrete URL (else the raw template is returned, for a caller-built
 `t -> url`). `times` overrides the cadence; otherwise it is built from the
 loader's `temporal` (`start` + `frequency` over `records_per_file`, or a single
-const sample when there is no cadence). The returned spec has `url`, `format`,
+const sample when there is no cadence).
+
+`target = (min_lon, min_lat, max_lon, max_lat)` (the simulation grid's lon/lat
+envelope) fills the domain-derived URL parameters — the ArcGIS ImageServer
+`{bbox_*_deg}`/`{image_*}` placeholders of the GeoTIFF loaders (LANDFIRE / USGS
+3DEP), and the CDS `area` of a `metadata.cds` loader (ERA5). `image_size = (w, h)`
+sets the requested ArcGIS raster size. Static `{version}`/`{product}` fills are
+read from `metadata.url_defaults`. The returned spec has `url`, `format`,
 `variables` (the file-variable names), `time_dim`, and `times`.
 """
 function to_esio_loader(loader::AbstractDict; anchor::Union{Nothing,Dates.DateTime} = nothing,
-                        times = nothing, n_records::Union{Nothing,Int} = nothing)
+                        times = nothing, n_records::Union{Nothing,Int} = nothing,
+                        target = nothing, image_size = nothing)
     src = get(loader, "source", nothing)
     src === nothing && error("to_esio_loader: loader has no `source` block")
     tpl = String(get(src, "url_template", get(src, "url", "")))
     isempty(tpl) && error("to_esio_loader: loader source has no `url_template`/`url`")
     meta = get(loader, "metadata", Dict{String,Any}())
-    fmt = _esio_format(tpl, meta)
 
     vars = get(loader, "variables", Dict{String,Any}())
     file_vars = String[String(get(v, "file_variable", k)) for (k, v) in vars]
@@ -175,9 +228,23 @@ function to_esio_loader(loader::AbstractDict; anchor::Union{Nothing,Dates.DateTi
         cadence = Float64[(i - 1) * step for i in 1:nrec]
     end
 
-    url = anchor === nothing ? tpl :
-          (occursin("{date:", tpl) ? _expand_date_template(tpl, anchor) : tpl)
+    # CDS loader: the source opts in with a `cds://<dataset>` url_template (a loader can
+    # ALSO carry an http mirror template + metadata.cds — then the mirror is primary, as
+    # for era5_loader.esm). Build the cds:// request URL with `area` from the domain bbox;
+    # metadata.cds supplies pressure levels / format.
+    if startswith(lowercase(tpl), "cds:")
+        cds = get(meta, "cds", Dict{String,Any}())
+        dataset = String(get(cds, "dataset", replace(tpl, r"^cds://"i => "")))
+        target === nothing && error("to_esio_loader: CDS loader needs a `target` bbox for the request `area`")
+        url = _cds_url(dataset, target, file_vars; levels = get(cds, "pressure_levels", nothing))
+        return (; url = url, format = String(get(cds, "format", "netcdf")),
+                variables = file_vars, time_dim = time_dim, times = cadence)
+    end
 
-    return (; url = url, format = fmt, variables = file_vars,
+    # Static fills (version/product) → domain bbox/image-size fills → date expansion.
+    url = _fill_consts(tpl, get(meta, "url_defaults", Dict{String,Any}()))
+    url = _fill_bbox(url, target, image_size)
+    url = anchor === nothing ? url : (occursin("{date:", url) ? _expand_date_template(url, anchor) : url)
+    return (; url = url, format = _esio_format(url, meta), variables = file_vars,
             time_dim = time_dim, times = cadence)
 end

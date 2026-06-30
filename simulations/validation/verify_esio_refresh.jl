@@ -29,10 +29,15 @@ const CORPUS = get(ENV, "EARTHSCIIO_CORPUS", joinpath(ESIO_ROOT, "conformance", 
 let env = get(ENV, "ESIO_REFRESH_ENV", joinpath(REPO, ".esio_refresh_env"))
     mkpath(env)
     Pkg.activate(env; io = devnull)
-    if !isfile(joinpath(env, "Manifest.toml"))
-        Pkg.develop([Pkg.PackageSpec(path = ESS_PKG), Pkg.PackageSpec(path = ESIO_PKG)]; io = devnull)
-        Pkg.add(["DiffEqCallbacks", "SciMLBase", "OrdinaryDiffEqTsit5"]; io = devnull)
-    end
+    # Ensure each dep is present (NOT gated on Manifest existence): this env is shared
+    # with verify_to_esio_loader.jl, whose lighter bootstrap may have created it WITHOUT
+    # the solver/callback stack — gating on the Manifest would then skip these and the
+    # `using DiffEqCallbacks` below would fail depending on run order.
+    deps = Pkg.project().dependencies
+    haskey(deps, "EarthSciSerialization") || Pkg.develop(Pkg.PackageSpec(path = ESS_PKG); io = devnull)
+    haskey(deps, "EarthSciIO") || Pkg.develop(Pkg.PackageSpec(path = ESIO_PKG); io = devnull)
+    add = filter(p -> !haskey(deps, p), ["DiffEqCallbacks", "SciMLBase", "OrdinaryDiffEqTsit5"])
+    isempty(add) || Pkg.add(add; io = devnull)
     Pkg.instantiate(; io = devnull)
 end
 

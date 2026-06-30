@@ -76,6 +76,39 @@ function main()
     @assert gspec.format == "geotiff" && gspec.variables == ["Band1"] && gspec.times === nothing
     println("  GeoTIFF loader → format=", gspec.format, " (const: no temporal cadence)")
 
+    # ArcGIS ImageServer (LANDFIRE / USGS GeoTIFF): the domain bbox + image size + static
+    # version/product fills resolve the `exportImage` template to a concrete request URL.
+    arcgis = Dict{String,Any}(
+        "source" => Dict{String,Any}("url_template" =>
+            "https://lfps.usgs.gov/arcgis/rest/services/Landfire_{version}/{version}_{product}_CONUS/ImageServer/" *
+            "exportImage?bbox={bbox_west_deg},{bbox_south_deg},{bbox_east_deg},{bbox_north_deg}&bboxSR=4326" *
+            "&imageSR=4326&size={image_width},{image_height}&format=tiff&f=image"),
+        "metadata" => Dict{String,Any}("url_defaults" => Dict{String,Any}("version" => "LF2022", "product" => "FBFM13")),
+        "variables" => Dict{String,Any}("fuel_model" => Dict{String,Any}("file_variable" => "Band1")))
+    aspec = to_esio_loader(arcgis; target = (-121.89, 39.54, -121.31, 40.02), image_size = (290, 240))
+    println("  ArcGIS LANDFIRE → ", aspec.url)
+    @assert aspec.format == "geotiff"
+    @assert occursin("Landfire_LF2022/LF2022_FBFM13_CONUS", aspec.url)
+    @assert occursin("bbox=-121.89,39.54,-121.31,40.02", aspec.url)
+    @assert occursin("size=290,240", aspec.url)
+    @assert !occursin("{", aspec.url)                # every placeholder filled
+    println("  → bbox/image-size + version/product fills resolved (no placeholder left)")
+
+    # CDS (ERA5): a metadata.cds loader → a cds:// request URL whose `area` is the domain bbox.
+    cdsl = Dict{String,Any}(
+        "source" => Dict{String,Any}("url_template" => "cds://reanalysis-era5-pressure-levels"),
+        "metadata" => Dict{String,Any}("cds" => Dict{String,Any}(
+            "dataset" => "reanalysis-era5-pressure-levels", "pressure_levels" => Any[1000, 850])),
+        "variables" => Dict{String,Any}("t" => Dict{String,Any}("file_variable" => "t"),
+                                        "u" => Dict{String,Any}("file_variable" => "u")))
+    cspec = to_esio_loader(cdsl; target = (-121.89, 39.54, -121.31, 40.02))
+    println("  CDS ERA5 → ", cspec.url)
+    @assert startswith(cspec.url, "cds://reanalysis-era5-pressure-levels?")
+    @assert occursin("area=40.02/-121.89/39.54/-121.31", cspec.url)   # N/W/S/E from the bbox
+    @assert occursin("pressure_level=1000,850", cspec.url)
+    @assert Set(cspec.variables) == Set(["t", "u"])
+    println("  → CDS area (N/W/S/E) + pressure levels + variables resolved from the domain")
+
     # The real ERA5 loader .esm (if the EarthSciModels checkout is present).
     real = joinpath(ESM_MODELS, "components", "earthsci_data", "era5_loader.esm")
     if isfile(real)
@@ -90,8 +123,20 @@ function main()
         println("  (EARTHSCIMODELS era5_loader.esm not found — skipped the real-file check)")
     end
 
+    # The real LANDFIRE loader .esm (ArcGIS) end to end, if present.
+    rlf = joinpath(ESM_MODELS, "components", "earthsci_data", "landfire_loader.esm")
+    if isfile(rlf)
+        loader = first(values(JSON3.read(read(rlf, String), Dict{String,Any})["data_loaders"]))
+        lspec = to_esio_loader(loader; target = (-121.89, 39.54, -121.31, 40.02), image_size = (290, 240))
+        @assert lspec.format == "geotiff" && !occursin("{", lspec.url) && occursin("bbox=-121.89", lspec.url)
+        println("  real landfire_loader.esm → ", split(lspec.url, "?")[1], "?…(bbox+size filled)")
+    else
+        println("  (EARTHSCIMODELS landfire_loader.esm not found — skipped the real-file check)")
+    end
+
     println("\n  ✓ to_esio_loader maps a loader .esm (url_template + temporal + variables) to a runnable",
-            "\n    esio_provider spec; date-template expansion, ISO-8601 cadence, and format inference work.")
+            "\n    esio_provider spec; date-template expansion, ISO-8601 cadence, format inference, the ArcGIS",
+            "\n    bbox/image-size fills, and the CDS `area` request all resolve from the domain.")
     return 0
 end
 

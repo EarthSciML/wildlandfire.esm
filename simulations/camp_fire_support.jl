@@ -27,8 +27,17 @@ let env = joinpath(ESS_PKG, "scripts", "pde_sim_adapter")
                         "EARTHSCISERIALIZATION to your EarthSciSerialization checkout")
     Pkg.activate(env; io = devnull)
     isfile(joinpath(env, "Manifest.toml")) || Pkg.develop(path = ESS_PKG; io = devnull)
+    haskey(Pkg.project().dependencies, "GeometryOps") ||
+        Pkg.add(["GeometryOps", "GeoInterface"]; io = devnull)
     Pkg.instantiate(; io = devnull)
 end
+# Load the spherical-clip backend (GeometryOps + GeoInterface) at TOP LEVEL so the ESS
+# GeometryOps extension's `intersect_polygon`/`polygon_area` spherical methods are visible
+# in the world age every helper runs in. Importing it lazily INSIDE a function fails
+# silently (world-age: build_evaluator, already running, can't see the just-added methods),
+# yielding empty clips ⇒ a zero weight matrix. The computed conservative regridder is
+# geographic, so this backend is mandatory for `computed_regrid_weights`.
+import GeometryOps, GeoInterface
 
 using EarthSciSerialization
 using JSON3
@@ -40,6 +49,13 @@ const ESD_ROOT = get(ENV, "EARTHSCIDISCRETIZATIONS",
                      normpath(joinpath(REPO, "..", "earthscidiscretizations")))
 const GRAD_2D = joinpath(ESD_ROOT, "discretizations", "finite_difference",
                          "centered_grad_2nd_uniform_cartesian_2d.json")
+# The REAL conservative regridder camp_fire.esm couples in (ERA5t/r, Fuel, SlopeX/Y →
+# F_tgt): A_ij COMPUTED from the spherical intersect_polygon clip + Van Oosterom-Strackee
+# spherical-excess area, with the partition-of-unity-exact bin-skolem A_j_w denominator.
+# The driver runs THIS component (not a hand-rolled planar shoelace) for its regrid — see
+# `computed_regrid_weights`. (Phase-5 residual #4: retire the hand-rolled fields_regrid_spec.)
+const REGRID_COMPUTED = joinpath(ESD_ROOT, "regridding",
+                                 "conservative_regrid_overlap_join_computed.esm")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -634,5 +650,155 @@ function representative_forcing(dom; nsx = 3, nsy = 3, u_lo = 2.0, u_hi = 10.0)
         "wu" => [u_col[col_of(s)] for s in 1:ns], "wv" => zeros(ns),
         "sx" => fill(0.05, ns), "sy" => zeros(ns))
     return src_poly, field_src, ncol, nrow
+end
+
+# ---------------------------------------------------------------------------
+# COMPUTED conservative regridder (Phase-5 residual #4) — drive the monolithic fire's
+# 6 forcing fields through the REAL `conservative_regrid_overlap_join_computed.esm`
+# (the component camp_fire.esm actually couples in), retiring the hand-rolled planar
+# `fields_regrid_spec`. The component's overlap matrix A_ij is COMPUTED from the
+# source/target polygon rings via the spherical intersect_polygon clip + the
+# Van Oosterom-Strackee spherical-excess area, and the target denominator A_j_w is the
+# partition-of-unity-exact bin-skolem row-sum (Phase 3b). We size it to the camp source→
+# fire-grid target, extract its build-once WEIGHT MATRIX W (W·F_src = F_tgt; rows sum to
+# 1), and apply W to each field — so the geometry is the real ESD engine, not reimplemented.
+# ---------------------------------------------------------------------------
+
+"Fire target cells in lon/lat: cell (i,j) center + its 4 corners (±dx/2 in the LCC frame)
+inverse-projected to geographic. Flat target index t = (j-1)*nx + i (column-major in i).
+Returns (tgt_poly[nt,4,2] CCW lon/lat, tgt_lon[nt], tgt_lat[nt])."
+function fire_target_lonlat(dom)
+    nx, ny, dx = dom.nx, dom.ny, dom.dx
+    nt = nx * ny
+    P = zeros(nt, 4, 2); clon = zeros(nt); clat = zeros(nt)
+    for j in 1:ny, i in 1:nx
+        t = (j - 1) * nx + i
+        xc = dom.xmin + (i - 1) * dx; yc = dom.ymin + (j - 1) * dx
+        corners = ((xc - dx/2, yc - dx/2), (xc + dx/2, yc - dx/2),
+                   (xc + dx/2, yc + dx/2), (xc - dx/2, yc + dx/2))   # CCW
+        for (k, (x, y)) in enumerate(corners)
+            lo, la = lcc_inverse(x, y); P[t, k, 1] = lo; P[t, k, 2] = la
+        end
+        lo, la = lcc_inverse(xc, yc); clon[t] = lo; clat[t] = la
+    end
+    return P, clon, clat
+end
+
+"A coarse `nsx×nsy` representative source grid in lon/lat tiling the domain bbox (the
+geographic counterpart of `representative_forcing`'s LCC grid), with the W→E `wu` wind
+ramp + constant temp/rh/slope. Returns (src_poly[ns,4,2] lon/lat, src_lon, src_lat,
+field_src, nsx, nsy); s = (sy-1)*nsx + sx."
+function representative_forcing_lonlat(dom; nsx = 3, nsy = 3, u_lo = 2.0, u_hi = 10.0)
+    lo0, lo1, la0, la1 = _domain_lonlat_bbox(dom; pad = 0.0)
+    dlo = (lo1 - lo0) / nsx; dla = (la1 - la0) / nsy
+    ns = nsx * nsy
+    P = zeros(ns, 4, 2); slon = zeros(ns); slat = zeros(ns)
+    u_col = collect(range(u_lo, u_hi; length = nsx))
+    col_of(s) = ((s - 1) % nsx) + 1
+    for sy in 1:nsy, sx in 1:nsx
+        s = (sy - 1) * nsx + sx
+        a = lo0 + (sx - 1) * dlo; b = lo0 + sx * dlo
+        c = la0 + (sy - 1) * dla; d = la0 + sy * dla
+        for (k, (lo, la)) in enumerate(((a, c), (b, c), (b, d), (a, d)))   # CCW
+            P[s, k, 1] = lo; P[s, k, 2] = la
+        end
+        slon[s] = (a + b)/2; slat[s] = (c + d)/2
+    end
+    field_src = Dict{String,Vector{Float64}}(
+        "temp" => fill(288.0, ns), "rh" => fill(0.23, ns),
+        "wu" => [u_col[col_of(s)] for s in 1:ns], "wv" => zeros(ns),
+        "sx" => fill(0.05, ns), "sy" => zeros(ns))
+    return P, slon, slat, field_src, nsx, nsy
+end
+
+"Build-once WEIGHT MATRIX W[nt,ns] (W·F_src = F_tgt) of the REAL computed conservative
+regridder, sized to this source(ns)→fire-grid(nt) geometry. Loads
+`conservative_regrid_overlap_join_computed.esm`, resizes its src_cells/tgt_cells index
+sets, widens the authored [1,3] ODE LHS ranges to [1,nt], and — because the geometry
+(spherical clip → A_ij → A_j_w) is build-once SETUP — sweeps F_src over the unit basis
+through ONE evaluator (mutating the F_src param buffer) to read each weight column.
+The binning coords are shifted so the whole domain collapses to a single bin (the
+broad-phase keeps every candidate pair; the sub-atol sliver filter drops non-overlaps),
+which is exact for the small camp source. Rows of W sum to 1 (partition of unity)."
+function computed_regrid_weights(src_poly, src_lon, src_lat, tgt_poly, tgt_lon, tgt_lat)
+    ns = size(src_poly, 1); nt = size(tgt_poly, 1)
+    raw = JSON3.read(read(REGRID_COMPUTED, String), Dict{String,Any})
+    m = raw["models"]["ConservativeRegridOverlapJoinComputed"]
+    m["index_sets"]["src_cells"]["size"] = ns
+    m["index_sets"]["tgt_cells"]["size"] = nt
+    for eq in m["equations"]                                   # widen authored [1,3] j-ranges
+        lhs = eq["lhs"]
+        lhs isa AbstractDict && get(lhs, "op", "") == "aggregate" &&
+            haskey(lhs["ranges"], "j") && (lhs["ranges"]["j"] = Any[1, nt])
+    end
+    # Shift the binning coords so the whole source∪target extent collapses to a single bin
+    # (no straddle): use the COMBINED min/extent, else a source cell west/south of the
+    # target min floors to a negative bin and the equal-bin broad phase drops it.
+    lo0 = min(minimum(src_lon), minimum(tgt_lon)); la0 = min(minimum(src_lat), minimum(tgt_lat))
+    binw = max(maximum(src_lon), maximum(tgt_lon)) - lo0
+    binw = max(binw, max(maximum(src_lat), maximum(tgt_lat)) - la0, 1.0) * 4
+    ca = Dict{String,Any}("src_poly" => src_poly, "tgt_poly" => tgt_poly,
+        "src_lon" => src_lon .- lo0, "src_lat" => src_lat .- la0,
+        "tgt_lon" => tgt_lon .- lo0, "tgt_lat" => tgt_lat .- la0)
+    fbuf = zeros(ns)
+    ics = Base.merge(Dict("A_j[$j]" => 0.0 for j in 1:nt), Dict("F_tgt[$j]" => 0.0 for j in 1:nt))
+    f!, u0, p, _t, vmap = build_evaluator(raw; model_name = "ConservativeRegridOverlapJoinComputed",
+        initial_conditions = ics, const_arrays = ca, param_arrays = Dict("F_src" => fbuf),
+        parameter_overrides = Dict("dx" => binw, "dy" => binw, "atol" => 1e-18))
+    du = similar(u0)
+    W = zeros(nt, ns)
+    for s in 1:ns
+        fill!(fbuf, 0.0); fbuf[s] = 1.0
+        f!(du, u0, p, 0.0)
+        for j in 1:nt; W[j, s] = du[vmap["F_tgt[$j]"]]; end
+    end
+    return W
+end
+
+"Apply the computed regrid weights to the representative source fields, producing the 6
+monolithic forcing arrays keyed by their `_MONO_FORCING` names (`ERA5tRegrid.F_tgt`, …)
+as `[nx,ny]` matrices — the param buffers `fire_discretized`'s seeded forcing reads."
+function computed_forcing(dom, W, field_src)
+    nx, ny = dom.nx, dom.ny
+    forcing_of = Dict(_MONO_FORCING_OF)
+    return Dict{String,Any}(forcing_of[fn] => reshape(W * field_src[fn], nx, ny)
+                            for fn in keys(forcing_of))
+end
+
+"Convenience: the camp source geometry → computed weights → the 6 `[nx,ny]` forcing
+param buffers, all from the REAL computed regridder. Returns (forcing::Dict, W, field_src)."
+function computed_regrid_forcing(dom; nsx = 3, nsy = 3)
+    tgt_poly, tgt_lon, tgt_lat = fire_target_lonlat(dom)
+    src_poly, src_lon, src_lat, field_src, _, _ = representative_forcing_lonlat(dom; nsx = nsx, nsy = nsy)
+    W = computed_regrid_weights(src_poly, src_lon, src_lat, tgt_poly, tgt_lon, tgt_lat)
+    return computed_forcing(dom, W, field_src), W, field_src
+end
+
+# --- #5 data-refresh seam: a RegridApplier backed by the computed weights. Each forcing
+#     buffer is refreshed in place as W·(native source field) at every cadence tick, so
+#     real provider data (ERA5/LANDFIRE/USGS via to_esio_loader) drives the fire through
+#     the SAME conservative weights. `weights[var]`/`source_var[var]` are per-forcing.
+struct ComputedRegrid <: ESS.RegridApplier
+    weights::Dict{String,Matrix{Float64}}     # forcing var → W[nt,ns]
+    source_var::Dict{String,String}           # forcing var → native sample variable
+    shape::Tuple{Int,Int}                     # (nx, ny) of each forcing buffer
+end
+
+function ESS.apply_regrid!(r::ComputedRegrid, buffer::Array{Float64},
+                           var::AbstractString, sample)
+    v = String(var)
+    W = get(r.weights, v, nothing)
+    W === nothing && throw(ESS.RefreshError("ComputedRegrid has no weights for '$v'"))
+    src = vec(Float64.(ESS._regrid_field(sample, get(r.source_var, v, v))))
+    # Missing-value fill: real provider data can carry NaN/Inf (e.g. an ERA5 fill cell);
+    # since 0·NaN = NaN would poison even a zero-weight column, replace non-finite source
+    # values with the finite mean (a neutral fill) before the conservative apply.
+    if any(!isfinite, src)
+        fin = filter(isfinite, src)
+        m = isempty(fin) ? 0.0 : sum(fin) / length(fin)
+        src = [isfinite(x) ? x : m for x in src]
+    end
+    buffer .= reshape(W * src, size(buffer))
+    return buffer
 end
 
