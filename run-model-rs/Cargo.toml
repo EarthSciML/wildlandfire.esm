@@ -1,0 +1,40 @@
+[package]
+name = "run-model"
+version = "0.1.0"
+edition = "2021"
+# There are two bins (run-model + the profiling harness); make `cargo run` (used
+# by run-model-rs.sh, without --bin) target the runner.
+default-run = "run-model"
+
+# Minimal single-model runner. Depends on the official earthsci-toolkit crate
+# in the sibling EarthSciSerialization checkout by path — nothing is vendored.
+[dependencies]
+earthsci-toolkit = { path = "../../EarthSciSerialization/packages/earthsci-toolkit-rs" }
+# Plotting library (bitmap/PNG backend; system fonts via font-kit / CoreText).
+plotters = { version = "0.3", default-features = false, features = [
+    "bitmap_backend", "bitmap_encoder", "ttf", "all_elements",
+] }
+# In-process CPU sampling profiler (third-party). Optional: only pulled in by the
+# `profile` feature, so the normal runner build never compiles it.
+pprof = { version = "0.13", default-features = false, features = ["flamegraph"], optional = true }
+
+[features]
+profile = ["dep:pprof"]
+
+[[bin]]
+name = "run-model"
+path = "src/main.rs"
+
+# Profiling harness — only built with `--features profile` (see profile-rs.sh).
+[[bin]]
+name = "profile"
+path = "src/bin/profile.rs"
+required-features = ["profile"]
+
+# Release-with-symbols profile: same optimization as `release` (so we measure the
+# real hot loop) but keeps debug info so pprof-rs can name earthsci-toolkit's
+# internal frames instead of showing bare addresses. Its own target/ subdir, so
+# it never clobbers the release runner build.
+[profile.profiling]
+inherits = "release"
+debug = true

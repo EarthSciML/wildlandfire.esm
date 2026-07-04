@@ -1,0 +1,53 @@
+{
+  "esm": "0.8.0",
+  "metadata": {
+    "name": "wildlandfire",
+    "description": "2-D level-set Hamilton-Jacobi fire-front propagation assembled by REFERENCE (nothing hand-rolled here). The physics is the pre-built, DISCRETIZATION-AGNOSTIC LevelSetFireSpread model component from ../earthscimodels, imported by `ref`; the component imports no discretization of its own. This assembler chooses the spatial scheme and mounts it on the model-ref edge via `expression_template_imports` (esm-spec §9.7.10 form A: the edge's imports register into the referenced component's own template scope, so the leaf's bare D ops lower without editing the leaf) — the first-order Godunov (Rouy-Tourin / Osher-Sethian) upwind rule for the gradient-magnitude compound sqrt(D(psi,x)^2 + D(psi,y)^2) plus the central first-derivative rules central_D1x/D1y for the wind/slope normal-projection components, all from ../earthscidiscretizations/grids/cartesian_uniform_2d. Doubly-periodic unit box [0,1]x[0,1] at NX=NY (grid metaparameters bound at load). With the component's default calm/flat parameters (u=0, dz=0, phi_s_coeff=0) the spread rate reduces to S = R_0 and the model integrates psi_t = -R_0 |grad psi|_godunov; the front {psi=0} expands outward as a circle of radius 0.15 + R_0 t. The initial perimeter is NOT baked into the library leaf: it is declared here by the `InitialPerimeter` DEDICATED IC MODEL (esm-spec §11.4.1) — an empty-`variables` model carrying a single scoped-reference `ic(LevelSetFireSpread.psi)` equation that seeds psi as the signed distance to a circle of radius 0.15 at the box center. Grid extent is likewise consumer-supplied: the leaf spacing is dx=Lx/NX, dy=Ly/NY over the leaf's Lx,Ly extent parameters (default unit box), and the IC coordinates fold from the matching literals (the build-time ic scope excludes the runtime Lx/x0 params, so extent literals live in the problem layer, i.e. here). The runner overrides R_0=0.1 to keep the front clear of the periodic seam. The SAME file runs in both the Julia and Rust toolkits.",
+    "license": "MIT",
+    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:hamilton_jacobi", "level_set", "godunov", "referenced-component"],
+    "references": [
+      {
+        "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. J. Comput. Phys. 79(1), 12-49.",
+        "doi": "10.1016/0021-9991(88)90002-2"
+      }
+    ]
+  },
+  "metaparameters": {
+    "NX": { "type": "integer", "default": 64, "description": "Number of cells along x." },
+    "NY": { "type": "integer", "default": 64, "description": "Number of cells along y." }
+  },
+  "models": {
+    "LevelSetFireSpread": {
+      "ref": "../earthscimodels/components/wildland_fire/level_set_fire_spread.esm",
+      "expression_template_imports": [
+        { "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic.esm" },
+        { "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1x_periodic.esm" },
+        { "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1y_periodic.esm" }
+      ]
+    },
+    "InitialPerimeter": {
+      "variables": {},
+      "equations": [
+        {
+          "lhs": { "op": "ic", "args": ["LevelSetFireSpread.psi"] },
+          "rhs": {
+            "op": "aggregate",
+            "output_idx": ["i", "j"],
+            "args": [],
+            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "expr": {
+              "op": "-",
+              "args": [
+                { "op": "sqrt", "args": [ { "op": "+", "args": [
+                  { "op": "^", "args": [ { "op": "-", "args": [ { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] } ] }, 0.5 ] }, 2 ] },
+                  { "op": "^", "args": [ { "op": "-", "args": [ { "op": "*", "args": [ { "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] } ] }, 0.5 ] }, 2 ] }
+                ] } ] },
+                0.15
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

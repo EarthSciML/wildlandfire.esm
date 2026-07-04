@@ -1,1 +1,11 @@
 __pycache__/
+run-model-rs/target/
+run-model-jl/
+run-model-py/
+profile-jl-env/
+Manifest.toml
+# profiler scratch logs (keep the profiles/ artifacts themselves)
+profiles-jl.log
+profiles-rs.log
+profiles/*runner*.log
+profiles/*.pb.gz
