@@ -2,9 +2,26 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "wildlandfire",
-    "description": "2-D level-set Hamilton-Jacobi fire-front propagation assembled by REFERENCE (nothing hand-rolled here). The physics is the pre-built, DISCRETIZATION-AGNOSTIC LevelSetFireSpread model component from ../earthscimodels, imported by `ref`; the component imports no discretization of its own. This assembler chooses the spatial scheme and mounts it on the model-ref edge via `expression_template_imports` (esm-spec §9.7.10 form A: the edge's imports register into the referenced component's own template scope, so the leaf's bare D ops lower without editing the leaf) — the first-order Godunov (Rouy-Tourin / Osher-Sethian) upwind rule for the gradient-magnitude compound sqrt(D(psi,x)^2 + D(psi,y)^2) plus the central first-derivative rules central_D1x/D1y for the wind/slope normal-projection components, all from ../earthscidiscretizations/grids/cartesian_uniform_2d. Doubly-periodic unit box [0,1]x[0,1] at NX=NY (grid metaparameters bound at load). With the component's default calm/flat parameters (u=0, dz=0, phi_s_coeff=0) the spread rate reduces to S = R_0 and the model integrates psi_t = -R_0 |grad psi|_godunov; the front {psi=0} expands outward as a circle of radius 0.15 + R_0 t. The initial perimeter is NOT baked into the library leaf: it is declared here by the `InitialPerimeter` DEDICATED IC MODEL (esm-spec §11.4.1) — an empty-`variables` model carrying a single scoped-reference `ic(LevelSetFireSpread.psi)` equation that seeds psi as the signed distance to a circle of radius 0.15 at the box center. Grid extent is likewise consumer-supplied: the leaf spacing is dx=Lx/NX, dy=Ly/NY over the leaf's Lx,Ly extent parameters (default unit box), and the IC coordinates fold from the matching literals (the build-time ic scope excludes the runtime Lx/x0 params, so extent literals live in the problem layer, i.e. here). The runner overrides R_0=0.1 to keep the front clear of the periodic seam. The SAME file runs in both the Julia and Rust toolkits.",
+    "description": "Coupled wildland-fire-spread model, assembled ENTIRELY by reference. The spatial core is the 2-D level-set Hamilton-Jacobi front LevelSetFireSpread (ψ_t = -S(n̂)|∇ψ|, Mandel 2011 / Muñoz-Esparza 2018) on the doubly-periodic Camp-Fire domain 36 km x 40 km (runner binds NX=18, NY=20 -> dx=dy=2000 m, matching archive/camp_fire_model.jl; extent Lx=36000, Ly=40000 set as leaf parameters). The leaf's direction-dependent spread rate S(n̂)=R_0·(1+φ_W+φ_S) is no longer hand-set: its parameters are supplied by a Rothermel + NFDRS behavior stack, all imported by ref from ../earthscimodels and wired by the top-level `coupling` block (variable_map / param_to_var): FuelModelLookup (Anderson 13 fuel models -> σ, w0, δ, Mx, h) and EquilibriumMoistureContent -> OneHourFuelMoisture (T, RH -> dead-fuel moisture Mf) feed RothermelFireSpread (1972), which yields the base rate R_0 and the fuel-specific wind/slope coefficients C_wind, B_wind, E_wind, beta_ratio, phi_s_coeff for the leaf; MidflameWind (10 m wind -> midflame U, u_mf_x/y) and TerrainSlope (dz/dx,dz/dy -> tanφ, aspect) feed both Rothermel and the leaf's normal-projection wind/slope terms; FuelConsumption (Mandel 2011 Eq. 3) is present and receives the initial fuel load. The behavior components are scalar/pointwise, so fuel, wind, moisture and slope are currently UNIFORM over the grid (the level set is still fully spatial); per-cell spatial forcing via the LANDFIRE/USGS3DEP/ERA5 data loaders is a planned future step. The initial perimeter is the InitialPerimeter dedicated IC model (esm-spec §11.4.1): signed distance to a 3000 m ignition circle at the domain center (18000, 20000). The runner supplies the scalar inputs (fuel code, temperature, relative humidity, 10 m wind, terrain gradient); R_0 is no longer overridden — it comes from Rothermel. Requires the 7 referenced components at esm 0.8.0. TERRAIN DATA LOADER (this revision): the USGS 3DEP terrain data loader (../earthscimodels/components/earthsci_data/usgs3dep.esm, migrated to esm 0.8.0) is now imported by reference as USGS3DEP and supplies a real, per-cell terrain gradient (dzdx, dzdy) in place of the runner's uniform scalar slope. Reprojection and conservative-overlap regridding onto the fire grid are performed AT THE COUPLING (esm-spec 8.6), by the build-once TerrainRegrid model, which imports reprojection/longlat.esm and regridding/{conservative_overlap,cartesian_cell_rings}.esm from ../earthscidiscretizations and applies conservative_overlap_apply; the regridded slopes are wired (param_to_var) into TerrainSlope.dzdx/.dzdy, and thence to Rothermel and the level-set leaf. NOT YET RUN: the source geometry is a coarse stand-in for the runtime-fetched 3DEP raster and the reprojection is the longlat identity base case (a physically-calibrated run needs the fetched raster's cell counts, a georeferenced fire grid, and a projected-CRS reprojection library). USGS3DEP was chosen over LANDFIRE/ERA5 as the loader most likely to actually fetch: a live, no-auth USGS ImageServer endpoint returning a single-band F32 elevation GeoTIFF, with slopes derived declaratively by grad(elevation). RESTRUCTURED (correct esm 0.8.0 loader consumption): USGS3DEP now exposes only the loaded `elevation` (grad-of-loader dzdx/dzdy removed as structurally invalid — a shapeless loader field cannot be differentiated); TerrainRegrid conservatively regrids that ELEVATION onto the fire grid (consumed via index-gathers, not a bare grad), reshapes to [x,y], and computes dzdx/dzdy = D(elevation) with earthscidiscretizations central_D1x/D1y rules imported into TerrainRegrid, then couples the slopes into TerrainSlope. This runs in Julia once the ESS runner lowers data-loader subsystem fields (Python already does).",
     "license": "MIT",
-    "tags": ["esd:problem", "grid:cartesian_uniform_2d", "equation:hamilton_jacobi", "level_set", "godunov", "referenced-component"],
+    "tags": [
+      "esd:problem",
+      "grid:cartesian_uniform_2d",
+      "equation:hamilton_jacobi",
+      "level_set",
+      "godunov",
+      "referenced-component",
+      "rothermel",
+      "fuel_moisture",
+      "coupled",
+      "variable_map",
+      "data_loader",
+      "usgs3dep",
+      "terrain",
+      "regridding",
+      "reprojection",
+      "conservative_overlap"
+    ],
     "references": [
       {
         "citation": "Osher, S., & Sethian, J. A. (1988). Fronts propagating with curvature-dependent speed: Algorithms based on Hamilton-Jacobi formulations. J. Comput. Phys. 79(1), 12-49.",
@@ -13,41 +30,737 @@
     ]
   },
   "metaparameters": {
-    "NX": { "type": "integer", "default": 64, "description": "Number of cells along x." },
-    "NY": { "type": "integer", "default": 64, "description": "Number of cells along y." }
+    "NX": {
+      "type": "integer",
+      "default": 64,
+      "description": "Number of cells along x."
+    },
+    "NY": {
+      "type": "integer",
+      "default": 64,
+      "description": "Number of cells along y."
+    }
+  },
+  "index_sets": {
+    "src_cells": {
+      "kind": "interval",
+      "size": 1440
+    },
+    "src_x": {
+      "kind": "interval",
+      "size": 36
+    },
+    "src_y": {
+      "kind": "interval",
+      "size": 40
+    }
   },
   "models": {
     "LevelSetFireSpread": {
       "ref": "../earthscimodels/components/wildland_fire/level_set_fire_spread.esm",
       "expression_template_imports": [
-        { "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic.esm" },
-        { "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1x_periodic.esm" },
-        { "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1y_periodic.esm" }
+        {
+          "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/godunov_norm_D2_periodic.esm"
+        },
+        {
+          "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1x_periodic.esm"
+        },
+        {
+          "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1y_periodic.esm"
+        }
       ]
     },
     "InitialPerimeter": {
       "variables": {},
       "equations": [
         {
-          "lhs": { "op": "ic", "args": ["LevelSetFireSpread.psi"] },
+          "lhs": {
+            "op": "ic",
+            "args": [
+              "LevelSetFireSpread.psi"
+            ]
+          },
           "rhs": {
             "op": "aggregate",
-            "output_idx": ["i", "j"],
+            "output_idx": [
+              "i",
+              "j"
+            ],
             "args": [],
-            "ranges": { "i": { "from": "x" }, "j": { "from": "y" } },
+            "ranges": {
+              "i": {
+                "from": "x"
+              },
+              "j": {
+                "from": "y"
+              }
+            },
             "expr": {
               "op": "-",
               "args": [
-                { "op": "sqrt", "args": [ { "op": "+", "args": [
-                  { "op": "^", "args": [ { "op": "-", "args": [ { "op": "*", "args": [ { "op": "-", "args": ["i", 0.5] }, { "op": "/", "args": [1, "NX"] } ] }, 0.5 ] }, 2 ] },
-                  { "op": "^", "args": [ { "op": "-", "args": [ { "op": "*", "args": [ { "op": "-", "args": ["j", 0.5] }, { "op": "/", "args": [1, "NY"] } ] }, 0.5 ] }, 2 ] }
-                ] } ] },
-                0.15
+                {
+                  "op": "sqrt",
+                  "args": [
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "i",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        36000,
+                                        "NX"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                18000
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "^",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "*",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "j",
+                                        0.5
+                                      ]
+                                    },
+                                    {
+                                      "op": "/",
+                                      "args": [
+                                        40000,
+                                        "NY"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                20000
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                3000
               ]
             }
           }
         }
       ]
+    },
+    "FuelModelLookup": {
+      "ref": "../earthscimodels/components/wildland_fire/fuel_model_lookup.esm"
+    },
+    "EquilibriumMoistureContent": {
+      "ref": "../earthscimodels/components/wildland_fire/nfdrs/emc.esm"
+    },
+    "OneHourFuelMoisture": {
+      "ref": "../earthscimodels/components/wildland_fire/nfdrs/moisture_1h.esm"
+    },
+    "MidflameWind": {
+      "ref": "../earthscimodels/components/wildland_fire/midflame_wind.esm"
+    },
+    "TerrainSlope": {
+      "ref": "../earthscimodels/components/wildland_fire/terrain_slope.esm"
+    },
+    "RothermelFireSpread": {
+      "ref": "../earthscimodels/components/wildland_fire/rothermel/fire_spread.esm"
+    },
+    "FuelConsumption": {
+      "ref": "../earthscimodels/components/wildland_fire/level_set/fuel_consumption.esm"
+    },
+    "USGS3DEP": {
+      "ref": "../earthscimodels/components/earthsci_data/usgs3dep.esm"
+    },
+    "TerrainRegrid": {
+      "reference": {
+        "notes": "Build-once conservative-overlap regridder that transfers the USGS3DEP loader ELEVATION field from its source grid onto the fire model's [x,y] grid, then computes terrain slopes as D of the regridded elevation WHERE a discretization rule is in scope. This is the esm-spec 8.6/10.5 correct pattern (regridding is a coupling expression; a loaded field is consumed via index-gathers, NEVER by applying grad to the raw shapeless loader field): (1) reprojection is a no-op here (the fire grid is not georeferenced and only the identity longlat base case exists; a real degrees->metres map needs a georeferenced grid + a projected-CRS library) so the source origin is a plain parameter; (2) regridding/cartesian_cell_rings.esm builds src (finer) and tgt (fire) cell rings under the 9.7.7 prefixes `src`/`tgt`; (2b) ORIENTATION: the loader field arrives as F_raw in the raster's native [lat,lon] = [src_y, src_x] order (ESS is agnostic to dimension order; the EarthSciIO provider extension is a faithful pass-through, so the array is NOT reordered by ESS or the extension). F_elev reindexes F_raw into the src cell-ring enumeration (x=lon fastest, c=(y-1)*GX+x): F_elev[c] = F_raw[floor((c-1)/GX)+1, (c-1)-GX*floor((c-1)/GX)+1], i.e. a [lat,lon]->[x,y] transpose expressed in the MODEL, using floor(`/`) since the build-once geometry evaluator rounds index subscripts; (3) regridding/conservative_overlap.esm forms the area-overlap weights A_ij/A_j and applies conservative_overlap_apply to F_elev (gathered as F_src[i]) -> elev_regridded[tgt_cells]; (4) reshape [tgt_cells]->[x,y] (row-major c=(y-1)*NX+x, matching cartesian_cell_rings) and take dzdx=D(elev,x), dzdy=D(elev,y) with earthscidiscretizations central_D1x/D1y rules imported into THIS component (esm-spec 9.7.10). The slopes are then coupled (param_to_var) into TerrainSlope.dzdx/.dzdy. Consuming the loader field via a gather (not a bare grad) is what lets it bind; computing D on the fire grid (not the loader) is what lets the derivative lower. CAVEATS unchanged: the source grid (36x40, ~1 km) stands in for the runtime-fetched raster (bind src.cartesian_cell_rings GX/GY + NSRC to the fetched size when run); the longlat reprojection is the identity base case pending a georeferenced fire grid + projected-CRS library."
+      },
+      "expression_template_imports": [
+        {
+          "ref": "../earthscidiscretizations/regridding/conservative_overlap.esm",
+          "bindings": {
+            "NSRC": 1440,
+            "NTGT": 360,
+            "NVERT": 4
+          }
+        },
+        {
+          "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
+          "prefix": "src",
+          "bindings": {
+            "GX": 36,
+            "GY": 40
+          }
+        },
+        {
+          "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
+          "prefix": "tgt",
+          "bindings": {
+            "GX": 18,
+            "GY": 20
+          }
+        },
+        {
+          "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1x_periodic.esm"
+        },
+        {
+          "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1y_periodic.esm"
+        }
+      ],
+      "variables": {
+        "atol": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1e-12,
+          "description": "Sliver-overlap floor for the conservative regridder."
+        },
+        "src_dx": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1000.0,
+          "description": "Source cell spacing x (1 km stand-in for the fetched raster)."
+        },
+        "src_dy": {
+          "type": "parameter",
+          "units": "m",
+          "default": 1000.0,
+          "description": "Source cell spacing y."
+        },
+        "tgt_x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Fire grid west edge (m)."
+        },
+        "tgt_y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Fire grid south edge (m)."
+        },
+        "tgt_dx": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Fire grid dx = Lx/NX = 2000 m."
+        },
+        "tgt_dy": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Fire grid dy = Ly/NY = 2000 m."
+        },
+        "dx": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Fire grid x-spacing (= Lx/NX = 2000 m) — the free `dx` the imported central_D1x_periodic rule differentiates with."
+        },
+        "dy": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Fire grid y-spacing (= Ly/NY = 2000 m) — the free `dy` for central_D1y_periodic."
+        },
+        "F_raw": {
+          "type": "parameter",
+          "units": "m",
+          "shape": [
+            "src_y",
+            "src_x"
+          ],
+          "default": 0.0,
+          "description": "Loader elevation on the source grid, in the raster's NATIVE [lat,lon] = [src_y, src_x] layout, supplied by coupling from USGS3DEP.raw.elevation (param_to_var). The EarthSciIO provider returns the GeoTIFF field faithfully (dims [lat,lon]); ESS folds that CONST array into this 2-D param column-major with NO reorder (ESS is agnostic to dimension order — orientation is the model's concern, reconciled by F_elev below, not by ESS or the provider extension)."
+        },
+        "F_elev": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Source elevation reindexed from the loader's native [lat,lon] order into the src cell-ring enumeration that conservative_overlap_apply gathers as F_src[i]. cartesian_cell_rings enumerates src cells x(lon)-fastest, c = (y-1)*GX + x with GX=36; so for flat cell c, x = ((c-1) mod 36) + 1 and y = ((c-1) div 36) + 1, and F_elev[c] = F_raw[y, x] (F_raw is [lat=src_y, lon=src_x]). Integer div is the `/` op (E: _eval_const_int folds `/` to `div`); the lon column is (c-1) - 36*((c-1) div 36). This transpose keeps the [lat,lon]->[x,y] orientation convention inside the MODEL.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "src_cells"
+              }
+            },
+            "args": [
+              "F_raw"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_raw",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            36
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            36,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    36
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "src_x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Source-grid west edge (fire frame; placeholder for the fetched raster bbox_west). Plain parameter so setup-time geometry can read it."
+        },
+        "src_y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Source-grid south edge (fire frame; placeholder for the fetched raster bbox_south)."
+        },
+        "src_poly": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "src_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Source cell rings.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "src.cartesian_cell_rings_poly",
+            "args": [],
+            "bindings": {
+              "x0": "src_x0",
+              "y0": "src_y0",
+              "dx": "src_dx",
+              "dy": "src_dy"
+            }
+          }
+        },
+        "tgt_poly": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "tgt_cells",
+            "overlap_cell_verts",
+            "overlap_coord"
+          ],
+          "description": "Fire (target) cell rings.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "tgt.cartesian_cell_rings_poly",
+            "args": [],
+            "bindings": {
+              "x0": "tgt_x0",
+              "y0": "tgt_y0",
+              "dx": "tgt_dx",
+              "dy": "tgt_dy"
+            }
+          }
+        },
+        "A_ij": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells",
+            "tgt_cells"
+          ],
+          "description": "Overlap-area weights (planar).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar"
+            }
+          }
+        },
+        "A_j": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Partition-of-unity row normalizer.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "atol": "atol"
+            }
+          }
+        },
+        "elev_regridded": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Loader elevation conservatively regridded onto the fire cells (flat enumeration).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_elev",
+              "atol": "atol"
+            }
+          }
+        },
+        "elev_xy": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Regridded elevation gathered onto the fire [x,y] grid via the row-major index map c=(y-1)*NX+x (matches cartesian_cell_rings tgt enumeration). Expressed as a MAP aggregate (not reshape) so the build-once geometry materializer can evaluate it.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "elev_regridded"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "elev_regridded",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "dzdx": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "East-west terrain slope on the fire grid: D(elev_xy, x), lowered by the imported central_D1x_periodic rule (dz/dx in m/m).",
+          "expression": {
+            "op": "D",
+            "args": [
+              "elev_xy"
+            ],
+            "wrt": "x"
+          }
+        },
+        "dzdy": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "North-south terrain slope on the fire grid: D(elev_xy, y), lowered by central_D1y_periodic.",
+          "expression": {
+            "op": "D",
+            "args": [
+              "elev_xy"
+            ],
+            "wrt": "y"
+          }
+        }
+      },
+      "equations": []
     }
-  }
+  },
+  "coupling": [
+    {
+      "type": "variable_map",
+      "from": "FuelModelLookup.sigma",
+      "to": "RothermelFireSpread.sigma",
+      "transform": "param_to_var",
+      "description": "Fuel surface-area-to-volume ratio σ (Anderson FM code -> Rothermel)."
+    },
+    {
+      "type": "variable_map",
+      "from": "FuelModelLookup.w_0",
+      "to": "RothermelFireSpread.w0",
+      "transform": "param_to_var",
+      "description": "Oven-dry fuel load w0."
+    },
+    {
+      "type": "variable_map",
+      "from": "FuelModelLookup.delta",
+      "to": "RothermelFireSpread.delta",
+      "transform": "param_to_var",
+      "description": "Fuel-bed depth δ."
+    },
+    {
+      "type": "variable_map",
+      "from": "FuelModelLookup.M_x",
+      "to": "RothermelFireSpread.Mx",
+      "transform": "param_to_var",
+      "description": "Dead-fuel moisture of extinction Mx."
+    },
+    {
+      "type": "variable_map",
+      "from": "FuelModelLookup.h",
+      "to": "RothermelFireSpread.h",
+      "transform": "param_to_var",
+      "description": "Fuel low heat content h."
+    },
+    {
+      "type": "variable_map",
+      "from": "EquilibriumMoistureContent.EMC",
+      "to": "OneHourFuelMoisture.EMCPRM",
+      "transform": "param_to_var",
+      "description": "NFDRS equilibrium moisture content -> 1-h interface EMC."
+    },
+    {
+      "type": "variable_map",
+      "from": "OneHourFuelMoisture.MC1",
+      "to": "RothermelFireSpread.Mf",
+      "transform": "param_to_var",
+      "description": "1-h dead-fuel moisture MC1 -> Rothermel fuel moisture Mf."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainSlope.slope_aspect",
+      "to": "MidflameWind.slope_aspect",
+      "transform": "param_to_var",
+      "description": "Upslope aspect -> midflame wind direction reference."
+    },
+    {
+      "type": "variable_map",
+      "from": "MidflameWind.U",
+      "to": "RothermelFireSpread.U",
+      "transform": "param_to_var",
+      "description": "Midflame wind speed U."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainSlope.tan_phi",
+      "to": "RothermelFireSpread.tan_phi",
+      "transform": "param_to_var",
+      "description": "Slope steepness tanφ."
+    },
+    {
+      "type": "variable_map",
+      "from": "RothermelFireSpread.R0",
+      "to": "LevelSetFireSpread.R_0",
+      "transform": "param_to_var",
+      "description": "No-wind/no-slope base rate of spread R_0 (m/s)."
+    },
+    {
+      "type": "variable_map",
+      "from": "RothermelFireSpread.C_coeff",
+      "to": "LevelSetFireSpread.C_wind",
+      "transform": "param_to_var",
+      "description": "Wind coefficient C (fuel-specific)."
+    },
+    {
+      "type": "variable_map",
+      "from": "RothermelFireSpread.B_coeff",
+      "to": "LevelSetFireSpread.B_wind",
+      "transform": "param_to_var",
+      "description": "Wind exponent B (fuel-specific)."
+    },
+    {
+      "type": "variable_map",
+      "from": "RothermelFireSpread.E_coeff",
+      "to": "LevelSetFireSpread.E_wind",
+      "transform": "param_to_var",
+      "description": "Wind exponent E (fuel-specific)."
+    },
+    {
+      "type": "variable_map",
+      "from": "RothermelFireSpread.beta_ratio",
+      "to": "LevelSetFireSpread.beta_ratio",
+      "transform": "param_to_var",
+      "description": "Relative packing ratio β/β_op."
+    },
+    {
+      "type": "variable_map",
+      "from": "RothermelFireSpread.phi_s_coeff",
+      "to": "LevelSetFireSpread.phi_s_coeff",
+      "transform": "param_to_var",
+      "description": "Slope factor coefficient."
+    },
+    {
+      "type": "variable_map",
+      "from": "MidflameWind.u_mf_x",
+      "to": "LevelSetFireSpread.u_x",
+      "transform": "param_to_var",
+      "description": "Midflame east wind component -> leaf u_x."
+    },
+    {
+      "type": "variable_map",
+      "from": "MidflameWind.u_mf_y",
+      "to": "LevelSetFireSpread.u_y",
+      "transform": "param_to_var",
+      "description": "Midflame north wind component -> leaf u_y."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainSlope.dzdx_out",
+      "to": "LevelSetFireSpread.dzdx",
+      "transform": "param_to_var",
+      "description": "Terrain dz/dx -> leaf slope x."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainSlope.dzdy_out",
+      "to": "LevelSetFireSpread.dzdy",
+      "transform": "param_to_var",
+      "description": "Terrain dz/dy -> leaf slope y."
+    },
+    {
+      "type": "variable_map",
+      "from": "FuelModelLookup.w_0",
+      "to": "FuelConsumption.w0_initial",
+      "transform": "param_to_var",
+      "description": "Initial fuel load -> consumption model."
+    },
+    {
+      "type": "variable_map",
+      "from": "USGS3DEP.raw.elevation",
+      "to": "TerrainRegrid.F_raw",
+      "transform": "param_to_var",
+      "description": "USGS 3DEP loader elevation field -> TerrainRegrid.F_raw, the source-grid elevation in the raster's NATIVE [lat,lon] = [src_y, src_x] order. Coupled from the LOADER field raw.elevation (not the USGS3DEP.elevation alias) so build-time geometry setup resolves it against const_arrays: the CONST provider array is folded there by name and F_raw is declared to match its native 2-D shape. ESS is agnostic to dimension order and the EarthSciIO provider extension is a faithful pass-through, so the [lat,lon]->[x,y] reconciliation happens in the model (F_raw -> F_elev transpose), not here."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainRegrid.dzdx",
+      "to": "TerrainSlope.dzdx",
+      "transform": "param_to_var",
+      "description": "Per-cell terrain dz/dx (regridded elevation, differentiated on the fire grid) -> TerrainSlope; flows to Rothermel tan_phi/aspect and the leaf."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainRegrid.dzdy",
+      "to": "TerrainSlope.dzdy",
+      "transform": "param_to_var",
+      "description": "Per-cell terrain dz/dy -> TerrainSlope."
+    }
+  ]
 }
