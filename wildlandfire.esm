@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "wildlandfire",
-    "description": "Coupled wildland-fire-spread model, assembled ENTIRELY by reference. The spatial core is the 2-D level-set Hamilton-Jacobi front LevelSetFireSpread (ψ_t = -S(n̂)|∇ψ|, Mandel 2011 / Muñoz-Esparza 2018) on the doubly-periodic Camp-Fire domain 36 km x 40 km (runner binds NX=18, NY=20 -> dx=dy=2000 m, matching archive/camp_fire_model.jl; extent Lx=36000, Ly=40000 set as leaf parameters). The leaf's direction-dependent spread rate S(n̂)=R_0·(1+φ_W+φ_S) is no longer hand-set: its parameters are supplied by a Rothermel + NFDRS behavior stack, all imported by ref from ../earthscimodels and wired by the top-level `coupling` block (variable_map / param_to_var): FuelModelLookup (Anderson 13 fuel models -> σ, w0, δ, Mx, h) and EquilibriumMoistureContent -> OneHourFuelMoisture (T, RH -> dead-fuel moisture Mf) feed RothermelFireSpread (1972), which yields the base rate R_0 and the fuel-specific wind/slope coefficients C_wind, B_wind, E_wind, beta_ratio, phi_s_coeff for the leaf; MidflameWind (10 m wind -> midflame U, u_mf_x/y) and TerrainSlope (dz/dx,dz/dy -> tanφ, aspect) feed both Rothermel and the leaf's normal-projection wind/slope terms; FuelConsumption (Mandel 2011 Eq. 3) is present and receives the initial fuel load. The behavior components are scalar/pointwise, so fuel, wind, moisture and slope are currently UNIFORM over the grid (the level set is still fully spatial); per-cell spatial forcing via the LANDFIRE/USGS3DEP/ERA5 data loaders is a planned future step. The initial perimeter is the InitialPerimeter dedicated IC model (esm-spec §11.4.1): signed distance to a 3000 m ignition circle at the domain center (18000, 20000). The runner supplies the scalar inputs (fuel code, temperature, relative humidity, 10 m wind, terrain gradient); R_0 is no longer overridden — it comes from Rothermel. Requires the 7 referenced components at esm 0.8.0. TERRAIN DATA LOADER (this revision): the USGS 3DEP terrain data loader (../earthscimodels/components/earthsci_data/usgs3dep.esm, migrated to esm 0.8.0) is now imported by reference as USGS3DEP and supplies a real, per-cell terrain gradient (dzdx, dzdy) in place of the runner's uniform scalar slope. Reprojection and conservative-overlap regridding onto the fire grid are performed AT THE COUPLING (esm-spec 8.6), by the build-once TerrainRegrid model, which imports reprojection/longlat.esm and regridding/{conservative_overlap,cartesian_cell_rings}.esm from ../earthscidiscretizations and applies conservative_overlap_apply; the regridded slopes are wired (param_to_var) into TerrainSlope.dzdx/.dzdy, and thence to Rothermel and the level-set leaf. NOT YET RUN: the source geometry is a coarse stand-in for the runtime-fetched 3DEP raster and the reprojection is the longlat identity base case (a physically-calibrated run needs the fetched raster's cell counts, a georeferenced fire grid, and a projected-CRS reprojection library). USGS3DEP was chosen over LANDFIRE/ERA5 as the loader most likely to actually fetch: a live, no-auth USGS ImageServer endpoint returning a single-band F32 elevation GeoTIFF, with slopes derived declaratively by grad(elevation). RESTRUCTURED (correct esm 0.8.0 loader consumption): USGS3DEP now exposes only the loaded `elevation` (grad-of-loader dzdx/dzdy removed as structurally invalid — a shapeless loader field cannot be differentiated); TerrainRegrid conservatively regrids that ELEVATION onto the fire grid (consumed via index-gathers, not a bare grad), reshapes to [x,y], and computes dzdx/dzdy = D(elevation) with earthscidiscretizations central_D1x/D1y rules imported into TerrainRegrid, then couples the slopes into TerrainSlope. This runs in Julia once the ESS runner lowers data-loader subsystem fields (Python already does).",
+    "description": "Coupled wildland-fire-spread model, assembled ENTIRELY by reference. The spatial core is the 2-D level-set Hamilton-Jacobi front LevelSetFireSpread (ψ_t = -S(n̂)|∇ψ|, Mandel 2011 / Muñoz-Esparza 2018) on the doubly-periodic Camp-Fire domain 36 km x 40 km (runner binds NX=18, NY=20 -> dx=dy=2000 m, matching archive/camp_fire_model.jl; extent Lx=36000, Ly=40000 set as leaf parameters). The leaf's direction-dependent spread rate S(n̂)=R_0·(1+φ_W+φ_S) is no longer hand-set: its parameters are supplied by a Rothermel + NFDRS behavior stack, all imported by ref from ../earthscimodels and wired by the top-level `coupling` block (variable_map / param_to_var): FuelModelLookup (Anderson 13 fuel models -> σ, w0, δ, Mx, h) and EquilibriumMoistureContent -> OneHourFuelMoisture (T, RH -> dead-fuel moisture Mf) feed RothermelFireSpread (1972), which yields the base rate R_0 and the fuel-specific wind/slope coefficients C_wind, B_wind, E_wind, beta_ratio, phi_s_coeff for the leaf; MidflameWind (10 m wind -> midflame U, u_mf_x/y) and TerrainSlope (dz/dx,dz/dy -> tanφ, aspect) feed both Rothermel and the leaf's normal-projection wind/slope terms; FuelConsumption (Mandel 2011 Eq. 3) is present and receives the initial fuel load. The behavior components (Rothermel/NFDRS) are pointwise, but every one of their inputs is now a real, PER-CELL data-loader field regridded onto the fire grid inside this .esm, so the whole behavior stack is spatially varying: USGS 3DEP terrain -> per-cell dz/dx,dz/dy (TerrainRegrid); LANDFIRE FBFM13 -> per-cell fuel code -> per-cell Anderson-13 fuel properties (regridded in TerrainRegrid, coupled to FuelModelLookup.code); and ERA5 1000 hPa met (t,u,v,r) -> per-cell temperature, humidity and 10 m wind (Era5Regrid, coupled to EquilibriumMoistureContent + MidflameWind). All three loaders are conservatively regridded AT THE COUPLING (esm-spec 8.6); see the TerrainRegrid / Era5Regrid models and the coupling block. The initial perimeter is the InitialPerimeter dedicated IC model (esm-spec §11.4.1): signed distance to a 3000 m ignition circle at (25901, 22807) — the real Camp Fire origin at Pulga (39°48′37″N 121°26′14″W), matching archive/camp_fire_model.jl. The 36×40 km domain is centered on the Pulga–Paradise midpoint (as in the archive), so Pulga sits NE and Paradise (39°45′35″N 121°37′19″W, domain metres ≈ 10099, 17193) SW; the runners mark both towns on the plot. The runner supplies the scalar inputs (fuel code, temperature, relative humidity, 10 m wind, terrain gradient); R_0 is no longer overridden — it comes from Rothermel. Requires the 7 referenced components at esm 0.8.0. TERRAIN DATA LOADER (this revision): the USGS 3DEP terrain data loader (../earthscimodels/components/earthsci_data/usgs3dep.esm, migrated to esm 0.8.0) is now imported by reference as USGS3DEP and supplies a real, per-cell terrain gradient (dzdx, dzdy) in place of the runner's uniform scalar slope. Reprojection and conservative-overlap regridding onto the fire grid are performed AT THE COUPLING (esm-spec 8.6), by the build-once TerrainRegrid model, which imports reprojection/longlat.esm and regridding/{conservative_overlap,cartesian_cell_rings}.esm from ../earthscidiscretizations and applies conservative_overlap_apply; the regridded slopes are wired (param_to_var) into TerrainSlope.dzdx/.dzdy, and thence to Rothermel and the level-set leaf. NOT YET RUN: the source geometry is a coarse stand-in for the runtime-fetched 3DEP raster and the reprojection is the longlat identity base case (a physically-calibrated run needs the fetched raster's cell counts, a georeferenced fire grid, and a projected-CRS reprojection library). USGS3DEP was chosen over LANDFIRE/ERA5 as the loader most likely to actually fetch: a live, no-auth USGS ImageServer endpoint returning a single-band F32 elevation GeoTIFF, with slopes derived declaratively by grad(elevation). RESTRUCTURED (correct esm 0.8.0 loader consumption): USGS3DEP now exposes only the loaded `elevation` (grad-of-loader dzdx/dzdy removed as structurally invalid — a shapeless loader field cannot be differentiated); TerrainRegrid conservatively regrids that ELEVATION onto the fire grid (consumed via index-gathers, not a bare grad), reshapes to [x,y], and computes dzdx/dzdy = D(elevation) with earthscidiscretizations central_D1x/D1y rules imported into TerrainRegrid, then couples the slopes into TerrainSlope. This runs in Julia once the ESS runner lowers data-loader subsystem fields (Python already does).",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -53,6 +53,22 @@
     "src_y": {
       "kind": "interval",
       "size": 40
+    },
+    "era5_t": {
+      "kind": "interval",
+      "size": 1
+    },
+    "era5_lev": {
+      "kind": "interval",
+      "size": 1
+    },
+    "era5_y": {
+      "kind": "interval",
+      "size": 5
+    },
+    "era5_x": {
+      "kind": "interval",
+      "size": 5
     }
   },
   "models": {
@@ -129,7 +145,7 @@
                                     }
                                   ]
                                 },
-                                18000
+                                25901
                               ]
                             },
                             2
@@ -160,7 +176,7 @@
                                     }
                                   ]
                                 },
-                                20000
+                                22807
                               ]
                             },
                             2
@@ -201,6 +217,12 @@
     "USGS3DEP": {
       "ref": "../earthscimodels/components/earthsci_data/usgs3dep.esm"
     },
+    "LANDFIRE": {
+      "ref": "../earthscimodels/components/earthsci_data/landfire.esm"
+    },
+    "ERA5": {
+      "ref": "../earthscimodels/components/earthsci_data/era5.esm"
+    },
     "TerrainRegrid": {
       "reference": {
         "notes": "Build-once conservative-overlap regridder that transfers the USGS3DEP loader ELEVATION field from its source grid onto the fire model's [x,y] grid, then computes terrain slopes as D of the regridded elevation WHERE a discretization rule is in scope. This is the esm-spec 8.6/10.5 correct pattern (regridding is a coupling expression; a loaded field is consumed via index-gathers, NEVER by applying grad to the raw shapeless loader field): (1) reprojection is a no-op here (the fire grid is not georeferenced and only the identity longlat base case exists; a real degrees->metres map needs a georeferenced grid + a projected-CRS library) so the source origin is a plain parameter; (2) regridding/cartesian_cell_rings.esm builds src (finer) and tgt (fire) cell rings under the 9.7.7 prefixes `src`/`tgt`; (2b) ORIENTATION: the loader field arrives as F_raw in the raster's native [lat,lon] = [src_y, src_x] order (ESS is agnostic to dimension order; the EarthSciIO provider extension is a faithful pass-through, so the array is NOT reordered by ESS or the extension). F_elev reindexes F_raw into the src cell-ring enumeration (x=lon fastest, c=(y-1)*GX+x): F_elev[c] = F_raw[floor((c-1)/GX)+1, (c-1)-GX*floor((c-1)/GX)+1], i.e. a [lat,lon]->[x,y] transpose expressed in the MODEL, using floor(`/`) since the build-once geometry evaluator rounds index subscripts; (3) regridding/conservative_overlap.esm forms the area-overlap weights A_ij/A_j and applies conservative_overlap_apply to F_elev (gathered as F_src[i]) -> elev_regridded[tgt_cells]; (4) reshape [tgt_cells]->[x,y] (row-major c=(y-1)*NX+x, matching cartesian_cell_rings) and take dzdx=D(elev,x), dzdy=D(elev,y) with earthscidiscretizations central_D1x/D1y rules imported into THIS component (esm-spec 9.7.10). The slopes are then coupled (param_to_var) into TerrainSlope.dzdx/.dzdy. Consuming the loader field via a gather (not a bare grad) is what lets it bind; computing D on the fire grid (not the loader) is what lets the derivative lower. CAVEATS unchanged: the source grid (36x40, ~1 km) stands in for the runtime-fetched raster (bind src.cartesian_cell_rings GX/GY + NSRC to the fetched size when run); the longlat reprojection is the identity base case pending a georeferenced fire grid + projected-CRS library."
@@ -235,6 +257,15 @@
         },
         {
           "ref": "../earthscidiscretizations/grids/cartesian_uniform_2d/rules/central_D1y_periodic.esm"
+        },
+        {
+          "ref": "../earthscidiscretizations/regridding/cartesian_nearest_regrid.esm",
+          "bindings": {
+            "NSRC": 1440,
+            "NTGT": 360,
+            "GX_SRC": 36,
+            "GY_SRC": 40
+          }
         }
       ],
       "variables": {
@@ -450,6 +481,96 @@
             }
           }
         },
+        "bin_dx": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Broad-phase bin width x (= tgt_dx). The source grid is exactly 2x-nested in and origin-aligned to the target grid, so every source cell shares its bbox-min-corner floor-bin with the target cell containing it: the candidate equi-join is admissible (dense/gated value-identical) and prunes the narrow phase from O(NSRC*NTGT) to ~NSRC nested pairs."
+        },
+        "bin_dy": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Broad-phase bin width y (= tgt_dy). See bin_dx."
+        },
+        "src_rep_lon": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Broad-phase stage 1: per-source-cell representative x (bbox-min corner of the cell ring).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_src_rep_lon",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly"
+            }
+          }
+        },
+        "src_rep_lat": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Broad-phase stage 1: per-source-cell representative y (bbox-min corner).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_src_rep_lat",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly"
+            }
+          }
+        },
+        "tgt_rep_lon": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Broad-phase stage 1: per-target-cell representative x (bbox-min corner).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_tgt_rep_lon",
+            "args": [],
+            "bindings": {
+              "tgt_poly": "tgt_poly"
+            }
+          }
+        },
+        "tgt_rep_lat": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Broad-phase stage 1: per-target-cell representative y (bbox-min corner).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_tgt_rep_lat",
+            "args": [],
+            "bindings": {
+              "tgt_poly": "tgt_poly"
+            }
+          }
+        },
+        "src_bin": {
+          "type": "state",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Broad-phase stage 2: integer bin key skolem('bin', floor(src_rep_lon/bin_dx), floor(src_rep_lat/bin_dy)). A per-element skolem map on a state LHS: the value-invention front-door materializes the buffer once at build time and drops the equation from the ODE."
+        },
+        "tgt_bin": {
+          "type": "state",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Broad-phase stage 2: integer bin key of each target cell, identically quantized (see src_bin)."
+        },
         "A_ij": {
           "type": "observed",
           "units": "1",
@@ -457,15 +578,17 @@
             "src_cells",
             "tgt_cells"
           ],
-          "description": "Overlap-area weights (planar).",
+          "description": "Overlap-area weights (planar), candidate-gated by the src_bin/tgt_bin equi-join (value-identical to the dense narrow phase under the admissible binning).",
           "expression": {
             "op": "apply_expression_template",
-            "name": "conservative_overlap_A_ij",
+            "name": "conservative_overlap_A_ij_gated",
             "args": [],
             "bindings": {
               "src_poly": "src_poly",
               "tgt_poly": "tgt_poly",
-              "manifold": "planar"
+              "manifold": "planar",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin"
             }
           }
         },
@@ -475,13 +598,15 @@
           "shape": [
             "tgt_cells"
           ],
-          "description": "Partition-of-unity row normalizer.",
+          "description": "Partition-of-unity row normalizer (candidate-gated: same equi-join and sliver filter as the gated numerator, so partition-of-unity stays exact by construction).",
           "expression": {
             "op": "apply_expression_template",
-            "name": "conservative_overlap_A_j",
+            "name": "conservative_overlap_A_j_gated",
             "args": [],
             "bindings": {
               "A_ij": "A_ij",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin",
               "atol": "atol"
             }
           }
@@ -492,15 +617,17 @@
           "shape": [
             "tgt_cells"
           ],
-          "description": "Loader elevation conservatively regridded onto the fire cells (flat enumeration).",
+          "description": "Loader elevation conservatively regridded onto the fire cells (flat enumeration), candidate-gated apply.",
           "expression": {
             "op": "apply_expression_template",
-            "name": "conservative_overlap_apply",
+            "name": "conservative_overlap_apply_gated",
             "args": [],
             "bindings": {
               "A_ij": "A_ij",
               "A_j": "A_j",
               "F_src": "F_elev",
+              "src_bin": "src_bin",
+              "tgt_bin": "tgt_bin",
               "atol": "atol"
             }
           }
@@ -587,6 +714,1150 @@
               "elev_xy"
             ],
             "wrt": "y"
+          }
+        },
+        "F_fuel_raw": {
+          "type": "parameter",
+          "units": "1",
+          "shape": [
+            "src_y",
+            "src_x"
+          ],
+          "default": 1.0,
+          "description": "LANDFIRE fuel-model code on the source grid in native [lat,lon]=[src_y,src_x] layout, coupled from LANDFIRE.raw.fuel_model. CATEGORICAL Anderson-13 codes; same faithful CONST fold as F_raw."
+        },
+        "F_fuel": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "src_cells"
+          ],
+          "description": "Fuel code reindexed into the src cell-ring order (same transpose as F_elev).",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "src_cells"
+              }
+            },
+            "args": [
+              "F_fuel_raw"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_fuel_raw",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            36
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            36,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    36
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "fuel_regridded": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "LANDFIRE fuel code regridded onto the fire cells by NEAREST-neighbour (containing-cell) gather — a verbatim copy of the source Anderson-13 code, NOT an area-weighted average, so categorical codes stay exact (conservative averaging of e.g. code 5 with an adjacent urban 91 would yield a spurious non-burnable ~48). cartesian_nearest_regrid_apply imported by reference; elevation keeps conservative_overlap.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "cartesian_nearest_regrid_apply",
+            "args": [],
+            "bindings": {
+              "F_src": "F_fuel",
+              "tgt_lon": "tgt_lon",
+              "tgt_lat": "tgt_lat",
+              "src_x0": "src_x0",
+              "src_dx": "src_dx",
+              "src_y0": "src_y0",
+              "src_dy": "src_dy"
+            }
+          }
+        },
+        "fuel_xy": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Regridded fuel-model code on the fire [x,y] grid -> FuelModelLookup.code, making the fuel-behavior stack spatially varying.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "fuel_regridded"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "fuel_regridded",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "tgt_lon": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Fire (target) cell-centre x, for the nearest-regrid source lookup.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "tgt.cartesian_cell_rings_lon",
+            "args": [],
+            "bindings": {
+              "x0": "tgt_x0",
+              "dx": "tgt_dx"
+            }
+          }
+        },
+        "tgt_lat": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "tgt_cells"
+          ],
+          "description": "Fire (target) cell-centre y, for the nearest-regrid source lookup.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "tgt.cartesian_cell_rings_lat",
+            "args": [],
+            "bindings": {
+              "y0": "tgt_y0",
+              "dy": "tgt_dy"
+            }
+          }
+        }
+      },
+      "equations": [
+        {
+          "_comment": "Broad-phase bin buffers (value invention, build-time): src_bin[i] = skolem('bin', floor(src_rep_lon[i]/bin_dx), floor(src_rep_lat[i]/bin_dy)). A per-element skolem map on a state LHS is materialized once at setup and never enters the ODE.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "src_bin",
+              "i"
+            ]
+          },
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_src_bin",
+            "args": [],
+            "bindings": {
+              "src_lon": "src_rep_lon",
+              "src_lat": "src_rep_lat",
+              "bin_dx": "bin_dx",
+              "bin_dy": "bin_dy"
+            }
+          }
+        },
+        {
+          "_comment": "Broad-phase bin buffers: tgt_bin[j], identically quantized.",
+          "lhs": {
+            "op": "index",
+            "args": [
+              "tgt_bin",
+              "j"
+            ]
+          },
+          "rhs": {
+            "op": "apply_expression_template",
+            "name": "conservative_overlap_tgt_bin",
+            "args": [],
+            "bindings": {
+              "tgt_lon": "tgt_rep_lon",
+              "tgt_lat": "tgt_rep_lat",
+              "bin_dx": "bin_dx",
+              "bin_dy": "bin_dy"
+            }
+          }
+        }
+      ]
+    },
+    "Era5Regrid": {
+      "expression_template_imports": [
+        {
+          "ref": "../earthscidiscretizations/regridding/conservative_overlap.esm",
+          "prefix": "ov5",
+          "bindings": {
+            "NSRC": 25,
+            "NTGT": 360,
+            "NVERT": 4
+          }
+        },
+        {
+          "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
+          "prefix": "e5s",
+          "bindings": {
+            "GX": 5,
+            "GY": 5
+          }
+        },
+        {
+          "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
+          "prefix": "e5t",
+          "bindings": {
+            "GX": 18,
+            "GY": 20
+          }
+        }
+      ],
+      "reference": {
+        "notes": "Conservative-overlap regridder that transfers ERA5 1000 hPa surface met (t,u,v,r) from its coarse 0.25deg lon/lat grid onto the fire [x,y] grid — the SAME esm-spec 8.6 pattern as TerrainRegrid, proving a genuine cross-grid regrid (coarse geographic -> fine fire grid), not a domain average. 3D->2D: each ERA5 loader field arrives as F_*[era5_t,era5_lev,era5_y,era5_x] (the NetCDF (valid_time,pressure_level,lat,lon)); F_*_h selects the single time+level (index 1,1) and reindexes the horizontal lat/lon into the src cell-ring order (lon x-fastest; lat flipped because the ERA5 lat axis descends N->S while cartesian_cell_rings enumerates S->N). GEOMETRY: the ERA5 cells are placed at their TRUE positions in the fire metre-frame via src_x0/src_dx/src_y0/src_dy (an equirectangular map of the ERA5 grid's lon/lat against the fire bbox, supplied by the runner), so the overlap generalizes to a moved/larger fire domain — a fire cell picks up whichever ERA5 cell(s) actually cover it. Uses prefixed (ov5/e5s/e5t) overlap weights so it coexists with the 1440-cell TerrainRegrid. The regridded t_xy/u_xy/v_xy/rh_xy couple into EMC + MidflameWind, promoting the behavior stack to per-cell met. GENERALIZE CAVEAT: the ERA5 grid SIZE (5x5) is a bound integer literal (like terrain's 36x40); a very different domain re-binds GX/GY/NSRC, but the overlap geometry itself is fully parameterized."
+      },
+      "variables": {
+        "atol": {
+          "type": "parameter",
+          "units": "1",
+          "default": 1e-12,
+          "description": "Sliver-overlap floor for the conservative regridder."
+        },
+        "src_x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": -25000.0,
+          "description": "ERA5 grid west edge in the fire metre-frame (runner: equirectangular map of the ERA5 lon vs the fire bbox). Plain param so setup geometry reads it."
+        },
+        "src_y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": -78000.0,
+          "description": "ERA5 grid south edge in the fire metre-frame (runner-supplied)."
+        },
+        "src_dx": {
+          "type": "parameter",
+          "units": "m",
+          "default": 21400.0,
+          "description": "ERA5 cell width in the fire metre-frame (0.25deg lon -> m; runner-supplied)."
+        },
+        "src_dy": {
+          "type": "parameter",
+          "units": "m",
+          "default": 27800.0,
+          "description": "ERA5 cell height in the fire metre-frame (0.25deg lat -> m; runner-supplied)."
+        },
+        "tgt_x0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Fire grid west edge (m)."
+        },
+        "tgt_y0": {
+          "type": "parameter",
+          "units": "m",
+          "default": 0.0,
+          "description": "Fire grid south edge (m)."
+        },
+        "tgt_dx": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Fire grid dx = Lx/NX."
+        },
+        "tgt_dy": {
+          "type": "parameter",
+          "units": "m",
+          "default": 2000.0,
+          "description": "Fire grid dy = Ly/NY."
+        },
+        "F_t": {
+          "type": "parameter",
+          "units": "K",
+          "shape": [
+            "era5_t",
+            "era5_lev",
+            "era5_y",
+            "era5_x"
+          ],
+          "default": 0.0,
+          "description": "ERA5 1000 hPa temperature (K) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.t."
+        },
+        "F_u": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": [
+            "era5_t",
+            "era5_lev",
+            "era5_y",
+            "era5_x"
+          ],
+          "default": 0.0,
+          "description": "ERA5 1000 hPa zonal wind u (m/s) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.u."
+        },
+        "F_v": {
+          "type": "parameter",
+          "units": "m/s",
+          "shape": [
+            "era5_t",
+            "era5_lev",
+            "era5_y",
+            "era5_x"
+          ],
+          "default": 0.0,
+          "description": "ERA5 1000 hPa meridional wind v (m/s) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.v."
+        },
+        "F_r": {
+          "type": "parameter",
+          "units": "%",
+          "shape": [
+            "era5_t",
+            "era5_lev",
+            "era5_y",
+            "era5_x"
+          ],
+          "default": 0.0,
+          "description": "ERA5 1000 hPa relative humidity (%) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.r."
+        },
+        "F_t_h": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "F_t: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_t"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_t",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_u_h": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "F_u: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_u"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_u",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_v_h": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "F_v: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_v"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_v",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_r_h": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "F_r: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_r"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_r",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "src_poly": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "ov5.src_cells",
+            "ov5.overlap_cell_verts",
+            "ov5.overlap_coord"
+          ],
+          "description": "Source cell rings.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "e5s.cartesian_cell_rings_poly",
+            "args": [],
+            "bindings": {
+              "x0": "src_x0",
+              "y0": "src_y0",
+              "dx": "src_dx",
+              "dy": "src_dy"
+            }
+          }
+        },
+        "tgt_poly": {
+          "type": "observed",
+          "units": "m",
+          "shape": [
+            "ov5.tgt_cells",
+            "ov5.overlap_cell_verts",
+            "ov5.overlap_coord"
+          ],
+          "description": "Fire (target) cell rings.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "e5t.cartesian_cell_rings_poly",
+            "args": [],
+            "bindings": {
+              "x0": "tgt_x0",
+              "y0": "tgt_y0",
+              "dx": "tgt_dx",
+              "dy": "tgt_dy"
+            }
+          }
+        },
+        "A_ij": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells",
+            "ov5.tgt_cells"
+          ],
+          "description": "Overlap-area weights (planar).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_A_ij",
+            "args": [],
+            "bindings": {
+              "src_poly": "src_poly",
+              "tgt_poly": "tgt_poly",
+              "manifold": "planar"
+            }
+          }
+        },
+        "A_j": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Partition-of-unity row normalizer.",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_A_j",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "atol": "atol"
+            }
+          }
+        },
+        "t_regridded": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "F_t_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_t_h",
+              "atol": "atol"
+            }
+          }
+        },
+        "u_regridded": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "F_u_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_u_h",
+              "atol": "atol"
+            }
+          }
+        },
+        "v_regridded": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "F_v_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_v_h",
+              "atol": "atol"
+            }
+          }
+        },
+        "r_regridded": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "F_r_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_r_h",
+              "atol": "atol"
+            }
+          }
+        },
+        "t_xy": {
+          "type": "observed",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Per-cell air temperature (K) -> EMC.TEMP.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "t_regridded"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "t_regridded",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "u_xy": {
+          "type": "observed",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Per-cell 10 m east wind (m/s) -> MidflameWind.u_wind.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "u_regridded"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "u_regridded",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "v_xy": {
+          "type": "observed",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Per-cell 10 m north wind (m/s) -> MidflameWind.v_wind.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "v_regridded"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "v_regridded",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "rh_xy": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "r_regridded"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                0.01,
+                {
+                  "op": "index",
+                  "args": [
+                    "r_regridded",
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "gy",
+                                1
+                              ]
+                            },
+                            "NX"
+                          ]
+                        },
+                        "gx"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
         }
       },
@@ -761,6 +2032,76 @@
       "to": "TerrainSlope.dzdy",
       "transform": "param_to_var",
       "description": "Per-cell terrain dz/dy -> TerrainSlope."
+    },
+    {
+      "type": "variable_map",
+      "from": "LANDFIRE.raw.fuel_model",
+      "to": "TerrainRegrid.F_fuel_raw",
+      "transform": "param_to_var",
+      "description": "LANDFIRE fuel-model loader field -> TerrainRegrid.F_fuel_raw; regridded like elevation."
+    },
+    {
+      "type": "variable_map",
+      "from": "TerrainRegrid.fuel_xy",
+      "to": "FuelModelLookup.code",
+      "transform": "param_to_var",
+      "description": "Per-cell regridded fuel code -> FuelModelLookup.code (promotes sigma/w0/delta/Mx/h to per-cell)."
+    },
+    {
+      "type": "variable_map",
+      "from": "ERA5.pl.t",
+      "to": "Era5Regrid.F_t",
+      "transform": "param_to_var",
+      "description": "ERA5 1000 hPa temperature loader field -> Era5Regrid.F_t."
+    },
+    {
+      "type": "variable_map",
+      "from": "ERA5.pl.u",
+      "to": "Era5Regrid.F_u",
+      "transform": "param_to_var",
+      "description": "ERA5 1000 hPa zonal wind -> Era5Regrid.F_u."
+    },
+    {
+      "type": "variable_map",
+      "from": "ERA5.pl.v",
+      "to": "Era5Regrid.F_v",
+      "transform": "param_to_var",
+      "description": "ERA5 1000 hPa meridional wind -> Era5Regrid.F_v."
+    },
+    {
+      "type": "variable_map",
+      "from": "ERA5.pl.r",
+      "to": "Era5Regrid.F_r",
+      "transform": "param_to_var",
+      "description": "ERA5 1000 hPa relative humidity -> Era5Regrid.F_r."
+    },
+    {
+      "type": "variable_map",
+      "from": "Era5Regrid.t_xy",
+      "to": "EquilibriumMoistureContent.TEMP",
+      "transform": "param_to_var",
+      "description": "Per-cell ERA5 temperature -> EMC.TEMP."
+    },
+    {
+      "type": "variable_map",
+      "from": "Era5Regrid.rh_xy",
+      "to": "EquilibriumMoistureContent.RH",
+      "transform": "param_to_var",
+      "description": "Per-cell ERA5 relative humidity (fraction) -> EMC.RH."
+    },
+    {
+      "type": "variable_map",
+      "from": "Era5Regrid.u_xy",
+      "to": "MidflameWind.u_wind",
+      "transform": "param_to_var",
+      "description": "Per-cell ERA5 east wind -> MidflameWind.u_wind."
+    },
+    {
+      "type": "variable_map",
+      "from": "Era5Regrid.v_xy",
+      "to": "MidflameWind.v_wind",
+      "transform": "param_to_var",
+      "description": "Per-cell ERA5 north wind -> MidflameWind.v_wind."
     }
   ]
 }
