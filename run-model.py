@@ -2,30 +2,46 @@
 # run-model.py — minimal single-model runner for a 2-D EarthSci `.esm` (Python).
 #
 # The Python counterpart of run-model.jl / run-model-rs.sh. Same model, same
-# `.esm`, same answer: a 2-D level-set Hamilton-Jacobi front  psi_t = -S |grad psi|
-# on the doubly-periodic unit box, with |grad psi| discretized by the Godunov
+# `.esm`, same answer: a 2-D level-set Hamilton-Jacobi front  psi_t = -S(n̂)|grad psi|
+# on the doubly-periodic Camp-Fire box, with |grad psi| discretized by the Godunov
 # (Rouy-Tourin / Osher-Sethian) upwind scheme (imported by reference from the
 # sibling earthscidiscretizations checkout on the model-ref mount edge — nothing
 # is vendored here). psi starts as the signed distance to a circle, so the front
-# {psi = 0} expands outward at speed S = R_0. Loads through the earthsci_toolkit
-# Python binding, integrates with SciPy (LSODA) while sampling several snapshots,
-# and plots the front location at each time as a single figure with time encoded
-# by color (PNG). No conformance / MMS checks.
+# {psi = 0} expands outward at a Rothermel + NFDRS spread rate S(n̂). The spread is
+# driven by THREE real, per-cell data loaders, each conservatively regridded onto
+# the fire grid INSIDE the .esm (esm-spec §8.6 — regridding is a coupling
+# expression): (1) USGS 3DEP terrain elevation (live USGS ImageServer GeoTIFF, no
+# auth) → per-cell dz/dx, dz/dy; (2) LANDFIRE FBFM13 fuel model (live USGS
+# ImageServer GeoTIFF, no auth) → per-cell fuel code → the Anderson-13 fuel
+# properties; (3) ERA5 1000 hPa surface met (t, u, v, r) fetched from the Copernicus
+# CDS API (submit/poll/download, ~/.cdsapirc auth) → per-cell temperature, humidity
+# and 10 m wind. This runner supplies them by binding EarthSciIO providers to the
+# loader fields USGS3DEP.raw.elevation, LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r},
+# and the ERA5 source geometry (its 0.25° cells placed in the fire metre-frame so the
+# regrid generalizes to a moved/larger domain). Loads through the earthsci_toolkit
+# Python binding, integrates with SciPy (RK45) while sampling several snapshots, and
+# plots the front over the terrain with the ERA5 wind (PNG). No conformance / MMS.
 #
 # Usage:
 #   python run-model.py [model.esm] [t_end]
 #     model.esm   path to the .esm to run   (default: ./wildlandfire.esm)
-#     t_end       final integration time    (default: 2.0)
+#     t_end       final integration time    (default: 57600 s = 16 h)
+#
+# Requires a network connection (3DEP + LANDFIRE ImageServers, no auth) and a
+# Copernicus CDS key in ~/.cdsapirc (the ERA5 loader fetches via the CDS API).
 #
 # Environment: needs the earthsci_toolkit binding (dev'd in the sibling
-# EarthSciSerialization checkout — set ESS_ROOT to override) plus numpy / scipy,
-# and matplotlib for the PNG (the run still prints radii without it). The
+# EarthSciSerialization checkout — set ESS_ROOT to override) and the EarthSciIO
+# Python binding (sibling EarthSciIO checkout — set EIO_ROOT to override) plus
+# numpy / scipy / requests / certifi / tifffile (GeoTIFF) / xarray + netCDF4 (ERA5),
+# and matplotlib for the PNG (the run still prints field ranges without it). The
 # companion run-model-py.sh provisions a minimal venv and invokes this script.
 
 import os
 import re
 import sys
 import math
+from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ESS_ROOT = os.environ.get(
@@ -36,32 +52,159 @@ if not os.path.isfile(os.path.join(ESS_ROOT, "esm-schema.json")):
         f"EarthSciSerialization not found at '{ESS_ROOT}'; set ESS_ROOT or clone "
         "it as a sibling checkout of this repo."
     )
-# Use the dev'd Python binding straight from source (no install step).
+EIO_ROOT = os.environ.get(
+    "EIO_ROOT", os.path.normpath(os.path.join(HERE, "..", "EarthSciIO"))
+)
+if not os.path.isfile(os.path.join(EIO_ROOT, "earthsciio", "__init__.py")):
+    sys.exit(
+        f"EarthSciIO (Python binding) not found at '{EIO_ROOT}'; set EIO_ROOT or "
+        "clone EarthSciIO as a sibling checkout (needed for the terrain loader)."
+    )
+# Use the dev'd Python bindings straight from source (no install step).
 sys.path.insert(0, os.path.join(ESS_ROOT, "packages", "earthsci_toolkit", "src"))
+sys.path.insert(0, EIO_ROOT)
 
 import numpy as np
 import earthsci_toolkit as esm
+import earthsciio as esio        # EarthSciIO provides the ESS provider seam via
+                                 # the duck-typed adapter in _provider_sample_field
+                                 # (the Python analog of the Julia weakdep ext);
+                                 # tifffile backs EarthSciIO's geotiff reader.
 
-NT = 6      # number of front snapshots (t = 0 … t_end)
-N = 32      # grid resolution (metaparameters NX = NY = N); matches the Julia and
-            # Rust runners, capped here by the non-smooth Godunov RHS cost.
-R0 = 0.1    # LevelSetFireSpread.R_0 override (m/s): the mounted component's
-            # default R_0=1.0 was calibrated for its old 500 m domain; on the
-            # unit box that overshoots, so we set the isotropic speed to 0.1
-            # (front reaches 0.15 + 0.1·t_end, staying clear of the seam).
+NT = 6        # number of front snapshots (t = 0 … t_end)
+NX = 18       # grid cells along x; dx = LX/NX = 2000 m (matches the archive
+NY = 20       # grid cells along y; dy = LY/NY = 2000 m   camp_fire_model.jl grid)
+LX = 36000.0  # domain width  (m): Camp-Fire extent (half-width 18 km)
+LY = 40000.0  # domain height (m): Camp-Fire extent (half-width 20 km)
+
+# Camp-Fire domain (WGS84 lon/lat): the 36x40 km box centered on the Pulga-Paradise
+# midpoint, matching archive/camp_fire_model.jl. All three loaders fetch over it.
+BBOX_W, BBOX_S, BBOX_E, BBOX_N = -121.7400, 39.6049, -121.3192, 39.9651
+BBOX = f"{BBOX_W},{BBOX_S},{BBOX_E},{BBOX_N}"
+# Landmarks (WGS84 lon/lat) marked on the plot: the ignition at Pulga (the real
+# Camp Fire origin) and the town of Paradise.
+PULGA_LONLAT    = (-121.437222, 39.810278)   # 39°48′37″N 121°26′14″W (ignition)
+PARADISE_LONLAT = (-121.621944, 39.759722)   # 39°45′35″N 121°37′19″W
+# USGS 3DEP / LANDFIRE source rasters: GX×GY must match TerrainRegrid's
+# conservative_overlap NSRC and its src cartesian_cell_rings GX/GY (36×40 = 1440).
+GX   = 36
+GY   = 40
+# ERA5 pressure-level (1000 hPa surface) CDS request: a small NxN 0.25° lon/lat
+# block around the fire (ERA5_NX×ERA5_NY must match Era5Regrid's ov5 NSRC / e5s
+# GX,GY = 5×5 = 25). DISCRETE (hourly, time-varying): the CDS fetch pulls both
+# Camp-Fire days (8-9 Nov, all 24 h → 48 hourly `valid_time` records) and a
+# DISCRETE Provider slices ONE hour's record per solver tick, so the met changes
+# over the 16 h fire (the Julia binding does the same). The Provider's window
+# opens at the ignition hour (2018-11-08 14:00 UTC ≈ 06 PST) — solver t=0 maps
+# there — and runs to the next morning (2018-11-09 06:00 UTC).
+ERA5_AREA = [40, -122, 39, -121]        # [N,W,S,E] — 1° box → 5×5 cells @ 0.25°
+ERA5_NX, ERA5_NY = 5, 5
+ERA5_YEAR, ERA5_MONTH = 2018, 11        # Camp Fire ignition month
+ERA5_DAYS = [8, 9]                      # ignition day + next (48 hourly records)
+ERA5_START  = datetime(2018, 11, 8, 0, 0)    # loader epoch (cadence anchor)
+ERA5_IGNITE = datetime(2018, 11, 8, 14, 0)   # ignition hour = solver t=0 (UTC)
+ERA5_END    = datetime(2018, 11, 9, 6, 0)    # run-window end (UTC)
 
 model_path = sys.argv[1] if len(sys.argv) >= 2 else \
     os.path.join(HERE, "wildlandfire.esm")
-t_end = float(sys.argv[2]) if len(sys.argv) >= 3 else 2.0
+t_end = float(sys.argv[2]) if len(sys.argv) >= 3 else 57600.0   # 16 h
 
-print(f"loading    {model_path}  (NX=NY={N})")
-file = esm.load(model_path, metaparameters={"NX": N, "NY": N})
+esio.register_format_readers()   # idempotent; registers the geotiff/netcdf readers
+cache = esio.Cache(auth={"cds": esio.cds_auth()})   # cds auth for the ERA5 fetch
 
-print(f"simulating (0.0, {t_end}) with LSODA, {NT} snapshots …")
+# --- USGS 3DEP elevation (GeoTIFF, no auth) → USGS3DEP.raw.elevation --------
+terrain_url = (
+    "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/"
+    f"exportImage?bbox={BBOX}&size={GX},{GY}&format=tiff&bboxSR=4326&imageSR=4326"
+    "&pixelType=F32&interpolation=+RSP_BilinearInterpolation&f=image"
+)
+# --- LANDFIRE FBFM13 fuel model (GeoTIFF, no auth) → LANDFIRE.raw.fuel_model -
+landfire_url = (
+    "https://lfps.usgs.gov/arcgis/rest/services/Landfire_LF2022/LF2022_FBFM13_CONUS/"
+    f"ImageServer/exportImage?bbox={BBOX}&bboxSR=4326&imageSR=4326&size={GX},{GY}"
+    "&format=tiff&pixelType=S16&interpolation=+RSP_NearestNeighbor&f=image"
+)
+print(f"fetching   USGS 3DEP + LANDFIRE ({GX}×{GY}) and ERA5 met ({ERA5_NX}×{ERA5_NY}) for {BBOX} …")
+try:
+    terr = esio.Provider(esio.DataLoader(
+        name="USGS3DEP", format="geotiff", url=terrain_url, variables=["elevation"],
+        temporal=None, reader_kwargs={"band_names": ["elevation"]}), cache)
+    fuel = esio.Provider(esio.DataLoader(
+        name="LANDFIRE", format="geotiff", url=landfire_url, variables=["fuel_model"],
+        temporal=None, reader_kwargs={"band_names": ["fuel_model"]}), cache)
+    # --- ERA5 surface met via CDS (DISCRETE hourly, 1000 hPa: t,u,v,r) --------
+    # Fetch BOTH Camp-Fire days (8-9 Nov) at all 24 hourly steps → 48 hourly
+    # `valid_time` records in one NetCDF; each ERA5 provider is DISCRETE
+    # (LoaderTemporal, hourly cadence, time_dim="valid_time"), so it slices ONE
+    # hour's [pressure_level,lat,lon] record per solver tick and the met varies
+    # in-sim. The window (ignition hour → next morning) bounds the refresh
+    # schedule and anchors solver t=0 at 2018-11-08 14:00 UTC.
+    from earthsciio import era5 as _era5
+    from earthsciio.backends.cds import encode_cds_url as _enc
+    _req = _era5.era5_request(ERA5_YEAR, ERA5_MONTH, ERA5_DAYS,
+        ["temperature", "u_component_of_wind", "v_component_of_wind", "relative_humidity"],
+        [1000], ERA5_AREA)          # keep all 24 hourly steps (48 records over 2 days)
+    era5_url = _enc(_era5.ERA5_DATASET, _req)
+    era5_temporal = esio.LoaderTemporal(
+        start=ERA5_START, frequency=timedelta(hours=1),
+        file_period=timedelta(hours=48), time_dim="valid_time")
+    def era5_prov(short):
+        return esio.Provider(esio.DataLoader(name="ERA5", format="netcdf", url=era5_url,
+            variables=[short], temporal=era5_temporal, auth_realm="cds"),
+            cache, window=(ERA5_IGNITE, ERA5_END))
+    providers = {
+        "USGS3DEP.raw.elevation": terr, "LANDFIRE.raw.fuel_model": fuel,
+        "ERA5.pl.t": era5_prov("t"), "ERA5.pl.u": era5_prov("u"),
+        "ERA5.pl.v": era5_prov("v"), "ERA5.pl.r": era5_prov("r"),
+    }
+    # Prove the met varies over the run: mean 1000 hPa T at the ignition hour vs
+    # the window end (two different `valid_time` slices of the same fetch).
+    def _mean_era5(prov, when):
+        nds = prov.refresh(when)
+        name = (nds.variable_names()[0] if hasattr(nds, "variable_names")
+                else next(iter(nds.variables)))
+        return float(np.nanmean(np.asarray(nds[name].data, dtype=float)))
+    _t_prov = providers["ERA5.pl.t"]
+    print(f"ERA5 DISCRETE hourly met: mean 1000 hPa T "
+          f"{_mean_era5(_t_prov, ERA5_IGNITE):.2f} K @ {ERA5_IGNITE:%Y-%m-%d %H:%M}Z "
+          f"→ {_mean_era5(_t_prov, ERA5_END):.2f} K @ {ERA5_END:%Y-%m-%d %H:%M}Z "
+          f"(varies in-sim)", file=sys.stderr)
+except Exception as err:
+    sys.exit(
+        f"could not build the terrain/fuel/met providers for {BBOX}\n"
+        "the model requires providers for USGS3DEP.raw.elevation, "
+        "LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r} (network + ~/.cdsapirc needed).\n"
+        f"underlying error: {err}"
+    )
+
+# ERA5 src geometry: place the ERA5 sub-grid at its TRUE position in the fire
+# metre-frame (equirectangular map of the ERA5 lon/lat against the fire bbox) so
+# the conservative overlap generalizes to a moved/larger fire domain — each fire
+# cell picks up whichever ERA5 cell(s) actually cover it.
+_mlon, _mlat = LX / (BBOX_E - BBOX_W), LY / (BBOX_N - BBOX_S)
+era5_geom = {
+    "Era5Regrid.src_x0": (ERA5_AREA[1] - 0.125 - BBOX_W) * _mlon,   # west edge, westmost cell
+    "Era5Regrid.src_dx": 0.25 * _mlon,
+    "Era5Regrid.src_y0": (ERA5_AREA[2] - 0.125 - BBOX_S) * _mlat,   # south edge, southmost cell
+    "Era5Regrid.src_dy": 0.25 * _mlat,
+}
+
+print(f"loading    {model_path}  (NX={NX}, NY={NY})")
+file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
+
+# RK45 (explicit Dormand-Prince 5(4)) — the SciPy analog of Julia's Tsit5 / Rust's
+# Erk. The level-set Godunov Hamiltonian is hyperbolic (non-stiff), so an adaptive
+# explicit RK takes a modest number of steps; the implicit LSODA instead drives its
+# step count up on the non-smooth |∇ψ| and is orders of magnitude slower here.
+print(f"simulating (0.0, {t_end}) with RK45, {NT} snapshots …")
+# `inspect` captures the build-once geometry so we can read the fields the model
+# actually used (TerrainRegrid.elev_xy / fuel_xy, Era5Regrid.t_xy/…) — no re-fetch.
+insp = esm.BuildInspection()
 sim = esm.simulate(
     file, (0.0, t_end),
-    parameters={"LevelSetFireSpread.R_0": R0},
-    method="LSODA", rtol=1e-2, atol=1e-3,
+    parameters={"LevelSetFireSpread.Lx": LX, "LevelSetFireSpread.Ly": LY, **era5_geom},
+    method="RK45", rtol=1e-2, atol=1e-3,
+    providers=providers, inspect=insp,
 )
 if not sim.success:
     sys.exit(f"solver failed: {sim.message}")
@@ -84,10 +227,12 @@ if not groups:
 psi_stems = [k for k in groups if k.endswith("psi")]
 stem = max(psi_stems or list(groups), key=lambda k: len(groups[k]))
 cells = groups[stem]
-NX = max(c[0] for c in cells)
-NY = max(c[1] for c in cells)
-xs = [(i - 0.5) / NX for i in range(1, NX + 1)]
-ys = [(j - 0.5) / NY for j in range(1, NY + 1)]
+nx = max(c[0] for c in cells)
+ny = max(c[1] for c in cells)
+dx = LX / nx
+dy = LY / ny
+xs = [(i - 0.5) * dx for i in range(1, nx + 1)]
+ys = [(j - 0.5) * dy for j in range(1, ny + 1)]
 
 # SciPy's simulate() samples a dense trajectory rather than exact save times, so
 # reconstruct psi at the NT requested snapshots by linear interpolation of each
@@ -96,7 +241,7 @@ ys = [(j - 0.5) / NY for j in range(1, NY + 1)]
 t = np.asarray(sim.t, dtype=float)
 Y = np.asarray(sim.y, dtype=float)
 ts = list(np.linspace(0.0, t_end, NT))
-psi = [np.full((NX, NY), np.nan) for _ in ts]
+psi = [np.full((nx, ny), np.nan) for _ in ts]
 for (i, j, row) in cells:
     yi = np.interp(ts, t, Y[row])
     for k in range(len(ts)):
@@ -130,14 +275,45 @@ def zero_segments(xs, ys, Z):
     return X, Y
 
 
-cellarea = (1.0 / NX) * (1.0 / NY)
-print(f"\nsolver: success; field '{stem}' is {NX}×{NY}")
-for k, tt in enumerate(ts):
-    burning = int(np.sum(psi[k] < 0))
-    r = math.sqrt(burning * cellarea / math.pi)
-    print(f"  t={tt:.2f}  front r_eff={r:.4f}")
+cellarea = dx * dy
 
-# --- single figure: front (psi=0) at each time, color = time; PNG output -------
+
+# Every behavior input is now a real, per-cell loader field (terrain, fuel and
+# met are all spatially varying), so summarise each regridded field's range +
+# domain mean straight from the build inspection rather than a single scalar.
+def _field_summary(key, label, unit, scale=1.0):
+    a = insp.setup_arrays.get(key)
+    if a is None:
+        return None
+    a = np.asarray(a, dtype=float) * scale
+    return f"{label} {np.nanmin(a):.2f}–{np.nanmax(a):.2f} {unit} (mean {np.nanmean(a):.2f})"
+
+
+print("\ncoupled loader forcing (per-cell, regridded onto the fire grid):")
+for line in filter(None, [
+    _field_summary("TerrainRegrid.elev_xy", "  3DEP elevation", "m"),
+    _field_summary("TerrainRegrid.fuel_xy", "  LANDFIRE fuel code", ""),
+    _field_summary("Era5Regrid.t_xy", "  ERA5 temperature", "K"),
+    _field_summary("Era5Regrid.rh_xy", "  ERA5 rel. humidity", "", 100.0),
+    _field_summary("Era5Regrid.u_xy", "  ERA5 u-wind", "m/s"),
+    _field_summary("Era5Regrid.v_xy", "  ERA5 v-wind", "m/s"),
+]):
+    print(line)
+print(f"solver: success; field '{stem}' is {nx}×{ny}")
+# burning-area centroid: with wind the front is no longer centered on the ignition
+for k, tt in enumerate(ts):
+    burn = psi[k] < 0
+    n = int(np.sum(burn))
+    r = math.sqrt(n * cellarea / math.pi)
+    cx = float((np.asarray(xs)[:, None] * burn).sum() / n) if n else float("nan")
+    print(f"  t={tt:7.0f}s  r_eff={r:8.1f} m  x-centroid={cx:8.0f} m "
+          f"(ignition x=25901, Pulga)")
+
+# --- single figure: real 3DEP terrain + front (psi=0) at each time; PNG output -
+# The heatmap is the terrain the model ACTUALLY USED, read from the run itself:
+# TerrainRegrid.elev_xy (the loader elevation conservatively regridded onto the
+# fire [x,y] grid), pulled from the build inspection — not a separate download.
+# The contours are the in-model fire front (color = time) on the same grid.
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -147,22 +323,49 @@ except ImportError:
     print("\n(matplotlib not available — skipping PNG; radii above are the check)")
     sys.exit(0)
 
+elev_xy = np.asarray(insp.setup_arrays["TerrainRegrid.elev_xy"])   # [x,y] = (nx,ny)
 cg = LinearSegmentedColormap.from_list(
-    "seq_blue", ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"])   # early → late
-fig, ax = plt.subplots(figsize=(6.2, 5.4))
+    "warm", ["#ffe08a", "#ff9d3c", "#e5391c", "#8b0000"])   # warm early → late over terrain
+fig, ax = plt.subplots(figsize=(6.8, 5.6))
 fig.patch.set_facecolor("#fcfcfb")
 ax.set_facecolor("#fcfcfb")
+# terrain as an [y,x] image over the fire-grid extent (elev_xy is [x,y] → transpose)
+im = ax.imshow(elev_xy.T, origin="lower", extent=(0, LX, 0, LY),
+               cmap="terrain", alpha=0.85, aspect="equal", interpolation="nearest")
+cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+cb.set_label("elevation (m)")
+# ERA5 regridded 10 m wind (the met loader) as a light quiver overlay, so the plot
+# shows all three loaders: 3DEP terrain (heatmap), the front, and the ERA5 wind.
+u_xy = np.asarray(insp.setup_arrays.get("Era5Regrid.u_xy"))
+v_xy = np.asarray(insp.setup_arrays.get("Era5Regrid.v_xy"))
+if u_xy is not None and u_xy.shape == (nx, ny):
+    Xg, Yg = np.meshgrid(xs, ys, indexing="ij")
+    st = 2   # thin the arrows
+    ax.quiver(Xg[::st, ::st], Yg[::st, ::st], u_xy[::st, ::st], v_xy[::st, ::st],
+              color="#333333", alpha=0.5, scale=140, width=0.004, pivot="mid")
+# Landmark markers: the ignition at Pulga and the town of Paradise, placed from
+# their real lon/lat within the domain bbox.
+def _lonlat_xy(lon, lat):
+    return ((lon - BBOX_W) / (BBOX_E - BBOX_W) * LX,
+            (lat - BBOX_S) / (BBOX_N - BBOX_S) * LY)
+for (lon, lat), name, mk in [(PULGA_LONLAT, "Pulga (ignition)", "*"),
+                             (PARADISE_LONLAT, "Paradise", "s")]:
+    mx, my = _lonlat_xy(lon, lat)
+    ax.scatter([mx], [my], marker=mk, s=130 if mk == "*" else 60,
+               facecolor="#111111", edgecolor="white", linewidth=0.8, zorder=6)
+    ax.annotate(name, (mx, my), textcoords="offset points", xytext=(7, 5),
+                fontsize=8, color="#111111", zorder=6,
+                path_effects=None, fontweight="bold")
 for k, tt in enumerate(ts):
-    X, Y = zero_segments(xs, ys, psi[k])
+    Xc, Yc = zero_segments(xs, ys, psi[k])
     frac = 1.0 if len(ts) == 1 else k / (len(ts) - 1)
-    ax.plot(X, Y, color=cg(frac), lw=2, label=f"{tt:.2f}")
-ax.set_xlim(0, 1)
-ax.set_ylim(0, 1)
-ax.set_aspect("equal")
-ax.set_xlabel("x")
-ax.set_ylabel("y")
-ax.set_title(f"{os.path.basename(model_path)} — front {{{stem}=0}}, Python / LSODA",
-             fontsize=11)
+    ax.plot(Xc, Yc, color=cg(frac), lw=2.5, label=f"{tt/3600:.1f}h")
+ax.set_xlim(0, LX)
+ax.set_ylim(0, LY)
+ax.set_xlabel("x (m)")
+ax.set_ylabel("y (m)")
+ax.set_title(f"{os.path.basename(model_path)} — front {{{stem}=0}}: 3DEP terrain + "
+             "LANDFIRE fuel + ERA5 wind, Python / RK45", fontsize=8.5)
 leg = ax.legend(title="t", fontsize=8, loc="upper left",
                 bbox_to_anchor=(1.02, 1.0), borderaxespad=0.0)
 leg.get_title().set_fontsize(9)

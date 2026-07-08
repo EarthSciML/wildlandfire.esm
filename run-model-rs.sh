@@ -1,15 +1,25 @@
 #!/usr/bin/env bash
 # run-model-rs.sh — build+run the minimal Rust single-model runner.
 #
-# Thin wrapper over `cargo run` in run-model-rs/. The only wrinkle it handles is
-# OpenSSL: the earthsci-toolkit crate pulls in s2bindings-sys, whose vendored
+# The Rust counterpart of run-model.jl / run-model-py.sh: runs the SAME
+# terrain-coupled wildlandfire.esm, fetching the live USGS 3DEP elevation raster
+# through the EarthSciIO Rust binding (its pure-Rust `geotiff` reader) and binding
+# it to the model's USGS3DEP.raw.elevation loader field, then plots the fire front
+# over that terrain. Requires a network connection (the terrain loader fetches
+# live 3DEP; the raster is cached under run-model-rs/.esio-cache after the first
+# run). The earthsci-toolkit + earthsciio crates are used straight from the
+# sibling EarthSciSerialization / EarthSciIO checkouts by path — nothing vendored.
+#
+# Thin wrapper over `cargo run` in run-model-rs/. The one build wrinkle it handles
+# is OpenSSL: the earthsci-toolkit crate pulls in s2bindings-sys, whose vendored
 # s2geometry C++ kernel #include's <openssl/bn.h> and links libcrypto. On macOS
 # those headers/libs live under the Homebrew prefix, which the compiler and
 # linker do not search by default, so we add them via CPATH / LIBRARY_PATH
 # (clang honors both for every compile/link regardless of the CMake build).
+# (EarthSciIO's own HTTPS transport is rustls, so it needs no OpenSSL.)
 #
 # Usage: ./run-model-rs.sh [model.esm] [t_end]
-#   (defaults: ../wildlandfire.esm, t_end=2.0)
+#   (defaults: ../wildlandfire.esm, t_end=57600 = 16 h)
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

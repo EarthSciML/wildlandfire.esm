@@ -10,6 +10,15 @@ default-run = "run-model"
 # in the sibling EarthSciSerialization checkout by path — nothing is vendored.
 [dependencies]
 earthsci-toolkit = { path = "../../EarthSciSerialization/packages/earthsci-toolkit-rs" }
+# The array runtime's forcing buffer + provider seam are keyed by ndarray arrays
+# (ArrayD<f64>); the runner builds the terrain forcing field with it. Pinned to
+# the toolkit's own ndarray major version so the ArrayD types are identical.
+ndarray = "0.16"
+# EarthSciIO (Rust binding): fetches the live USGS 3DEP GeoTIFF and decodes it
+# through the `geotiff` reader, exactly as run-model.jl uses the Julia EarthSciIO
+# and run-model.py the Python one. Path dep on the sibling checkout — nothing
+# vendored. rustls transport, so no OpenSSL is needed for the HTTPS fetch.
+earthsciio = { path = "../../EarthSciIO/rust" }
 # Plotting library (bitmap/PNG backend; system fonts via font-kit / CoreText).
 plotters = { version = "0.3", default-features = false, features = [
     "bitmap_backend", "bitmap_encoder", "ttf", "all_elements",

@@ -1064,49 +1064,45 @@
           "type": "parameter",
           "units": "K",
           "shape": [
-            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa temperature (K) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.t."
+          "description": "ERA5 1000 hPa temperature (K) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.t."
         },
         "F_u": {
           "type": "parameter",
           "units": "m/s",
           "shape": [
-            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa zonal wind u (m/s) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.u."
+          "description": "ERA5 1000 hPa zonal wind u (m/s) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.u."
         },
         "F_v": {
           "type": "parameter",
           "units": "m/s",
           "shape": [
-            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa meridional wind v (m/s) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.v."
+          "description": "ERA5 1000 hPa meridional wind v (m/s) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.v."
         },
         "F_r": {
           "type": "parameter",
           "units": "%",
           "shape": [
-            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa relative humidity (%) on the era5 sub-grid, native [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x], coupled from ERA5.pl.r."
+          "description": "ERA5 1000 hPa relative humidity (%) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.r."
         },
         "F_t_h": {
           "type": "observed",
@@ -1132,7 +1128,6 @@
               "op": "index",
               "args": [
                 "F_t",
-                1,
                 1,
                 {
                   "op": "+",
@@ -1229,7 +1224,6 @@
               "args": [
                 "F_u",
                 1,
-                1,
                 {
                   "op": "+",
                   "args": [
@@ -1325,7 +1319,6 @@
               "args": [
                 "F_v",
                 1,
-                1,
                 {
                   "op": "+",
                   "args": [
@@ -1420,7 +1413,6 @@
               "op": "index",
               "args": [
                 "F_r",
-                1,
                 1,
                 {
                   "op": "+",
