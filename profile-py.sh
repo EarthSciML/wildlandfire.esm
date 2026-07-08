@@ -30,7 +30,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ESS_ROOT="${ESS_ROOT:-$(cd "$HERE/.." && pwd)/EarthSciSerialization}"
+ESS_ROOT="${ESS_ROOT:-$(cd "$HERE/.." && pwd)/EarthSciAST}"
 export ESS_ROOT
 EIO_ROOT="${EIO_ROOT:-$(cd "$HERE/.." && pwd)/EarthSciIO}"
 export EIO_ROOT

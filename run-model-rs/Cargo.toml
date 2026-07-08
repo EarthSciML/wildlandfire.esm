@@ -6,10 +6,10 @@ edition = "2021"
 # by run-model-rs.sh, without --bin) target the runner.
 default-run = "run-model"
 
-# Minimal single-model runner. Depends on the official earthsci-toolkit crate
-# in the sibling EarthSciSerialization checkout by path — nothing is vendored.
+# Minimal single-model runner. Depends on the official earthsci-ast crate
+# in the sibling EarthSciAST checkout by path — nothing is vendored.
 [dependencies]
-earthsci-toolkit = { path = "../../EarthSciSerialization/packages/earthsci-toolkit-rs" }
+earthsci-ast = { path = "../../EarthSciAST/pkg/earthsci-ast-rs" }
 # The array runtime's forcing buffer + provider seam are keyed by ndarray arrays
 # (ArrayD<f64>); the runner builds the terrain forcing field with it. Pinned to
 # the toolkit's own ndarray major version so the ArrayD types are identical.
@@ -41,7 +41,7 @@ path = "src/bin/profile.rs"
 required-features = ["profile"]
 
 # Release-with-symbols profile: same optimization as `release` (so we measure the
-# real hot loop) but keeps debug info so pprof-rs can name earthsci-toolkit's
+# real hot loop) but keeps debug info so pprof-rs can name earthsci-ast's
 # internal frames instead of showing bare addresses. Its own target/ subdir, so
 # it never clobbers the release runner build.
 [profile.profiling]

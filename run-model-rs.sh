@@ -7,11 +7,11 @@
 # it to the model's USGS3DEP.raw.elevation loader field, then plots the fire front
 # over that terrain. Requires a network connection (the terrain loader fetches
 # live 3DEP; the raster is cached under run-model-rs/.esio-cache after the first
-# run). The earthsci-toolkit + earthsciio crates are used straight from the
-# sibling EarthSciSerialization / EarthSciIO checkouts by path — nothing vendored.
+# run). The earthsci-ast + earthsciio crates are used straight from the
+# sibling EarthSciAST / EarthSciIO checkouts by path — nothing vendored.
 #
 # Thin wrapper over `cargo run` in run-model-rs/. The one build wrinkle it handles
-# is OpenSSL: the earthsci-toolkit crate pulls in s2bindings-sys, whose vendored
+# is OpenSSL: the earthsci-ast crate pulls in s2bindings-sys, whose vendored
 # s2geometry C++ kernel #include's <openssl/bn.h> and links libcrypto. On macOS
 # those headers/libs live under the Homebrew prefix, which the compiler and
 # linker do not search by default, so we add them via CPATH / LIBRARY_PATH

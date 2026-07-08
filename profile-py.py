@@ -21,7 +21,7 @@
 # process, so unlike cProfile it does not instrument every call, and unlike py-spy it
 # needs no root on macOS. The build-time regrid (s2 intersect_polygon over 1440×360
 # source×target cells) shows as self-time of the earthsciio / interpreter frames; the
-# per-cell RHS AST walk shows as the earthsci_toolkit interpreter frames — so the
+# per-cell RHS AST walk shows as the earthsci_ast interpreter frames — so the
 # build-vs-solve and RHS-vs-solver splits are visible.
 #
 # Why a very short window. Python's per-cell AST interpreter plus implicit LSODA is
@@ -45,11 +45,11 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ESS_ROOT = os.environ.get(
-    "ESS_ROOT", os.path.normpath(os.path.join(HERE, "..", "EarthSciSerialization"))
+    "ESS_ROOT", os.path.normpath(os.path.join(HERE, "..", "EarthSciAST"))
 )
 if not os.path.isfile(os.path.join(ESS_ROOT, "esm-schema.json")):
     sys.exit(
-        f"EarthSciSerialization not found at '{ESS_ROOT}'; set ESS_ROOT or clone "
+        f"EarthSciAST not found at '{ESS_ROOT}'; set ESS_ROOT or clone "
         "it as a sibling checkout of this repo."
     )
 EIO_ROOT = os.environ.get(
@@ -57,10 +57,10 @@ EIO_ROOT = os.environ.get(
 )
 if not os.path.isfile(os.path.join(EIO_ROOT, "earthsciio", "__init__.py")):
     sys.exit(f"EarthSciIO not found at '{EIO_ROOT}'; set EIO_ROOT or clone it as a sibling.")
-sys.path.insert(0, os.path.join(ESS_ROOT, "packages", "earthsci_toolkit", "src"))
+sys.path.insert(0, os.path.join(ESS_ROOT, "pkg", "earthsci-ast-py", "src"))
 sys.path.insert(0, EIO_ROOT)
 
-import earthsci_toolkit as esm  # noqa: E402
+import earthsci_ast as esm  # noqa: E402
 import earthsciio as esio  # noqa: E402
 from earthsciio import era5 as _era5  # noqa: E402
 from earthsciio.backends.cds import encode_cds_url as _enc  # noqa: E402

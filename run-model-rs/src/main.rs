@@ -13,7 +13,7 @@
 //! supplies that terrain by binding an EarthSciIO (Rust) provider to the loader
 //! field USGS3DEP.raw.elevation, exactly as run-model.jl binds the Julia
 //! EarthSciIO provider and run-model.py the Python one. Loads through
-//! earthsci-toolkit, integrates while saving snapshots, and plots the front at
+//! earthsci-ast, integrates while saving snapshots, and plots the front at
 //! each time over the terrain the run actually used (PNG). No conformance / MMS.
 //!
 //! Usage:
@@ -34,10 +34,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use earthsci_toolkit::parse::load_path_with_options;
-use earthsci_toolkit::provider::{CadenceProvider, NativeField, ProviderError};
-use earthsci_toolkit::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
-use earthsci_toolkit::simulate_array::BuildInspection;
+use earthsci_ast::parse::load_path_with_options;
+use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
+use earthsci_ast::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
+use earthsci_ast::simulate_array::BuildInspection;
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
 use ndarray::{ArrayD, Axis, IxDyn};
 use plotters::prelude::*;
@@ -89,7 +89,7 @@ const RAMP: [(u8, u8, u8); 4] = [
 ];
 
 /// A CONST EarthSciIO provider adapted to the ESS [`CadenceProvider`] seam — the
-/// Rust analog of the Julia `EarthSciSerializationEarthSciIOExt` weakdep
+/// Rust analog of the Julia `EarthSciASTEarthSciIOExt` weakdep
 /// extension and the Python duck-typed `_provider_sample_field` adapter. It
 /// delegates `materialize` to the real EarthSciIO `Provider` (which fetches +
 /// decodes the GeoTIFF) and converts each native field to the ESS `NativeField`.

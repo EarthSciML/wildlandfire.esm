@@ -18,7 +18,7 @@
 # and 10 m wind. This runner supplies them by binding EarthSciIO providers to the
 # loader fields USGS3DEP.raw.elevation, LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r},
 # and the ERA5 source geometry (its 0.25° cells placed in the fire metre-frame so the
-# regrid generalizes to a moved/larger domain). Loads through the earthsci_toolkit
+# regrid generalizes to a moved/larger domain). Loads through the earthsci_ast
 # Python binding, integrates with SciPy (RK45) while sampling several snapshots, and
 # plots the front over the terrain with the ERA5 wind (PNG). No conformance / MMS.
 #
@@ -30,8 +30,8 @@
 # Requires a network connection (3DEP + LANDFIRE ImageServers, no auth) and a
 # Copernicus CDS key in ~/.cdsapirc (the ERA5 loader fetches via the CDS API).
 #
-# Environment: needs the earthsci_toolkit binding (dev'd in the sibling
-# EarthSciSerialization checkout — set ESS_ROOT to override) and the EarthSciIO
+# Environment: needs the earthsci_ast binding (dev'd in the sibling
+# EarthSciAST checkout — set ESS_ROOT to override) and the EarthSciIO
 # Python binding (sibling EarthSciIO checkout — set EIO_ROOT to override) plus
 # numpy / scipy / requests / certifi / tifffile (GeoTIFF) / xarray + netCDF4 (ERA5),
 # and matplotlib for the PNG (the run still prints field ranges without it). The
@@ -45,11 +45,11 @@ from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ESS_ROOT = os.environ.get(
-    "ESS_ROOT", os.path.normpath(os.path.join(HERE, "..", "EarthSciSerialization"))
+    "ESS_ROOT", os.path.normpath(os.path.join(HERE, "..", "EarthSciAST"))
 )
 if not os.path.isfile(os.path.join(ESS_ROOT, "esm-schema.json")):
     sys.exit(
-        f"EarthSciSerialization not found at '{ESS_ROOT}'; set ESS_ROOT or clone "
+        f"EarthSciAST not found at '{ESS_ROOT}'; set ESS_ROOT or clone "
         "it as a sibling checkout of this repo."
     )
 EIO_ROOT = os.environ.get(
@@ -61,11 +61,11 @@ if not os.path.isfile(os.path.join(EIO_ROOT, "earthsciio", "__init__.py")):
         "clone EarthSciIO as a sibling checkout (needed for the terrain loader)."
     )
 # Use the dev'd Python bindings straight from source (no install step).
-sys.path.insert(0, os.path.join(ESS_ROOT, "packages", "earthsci_toolkit", "src"))
+sys.path.insert(0, os.path.join(ESS_ROOT, "pkg", "earthsci-ast-py", "src"))
 sys.path.insert(0, EIO_ROOT)
 
 import numpy as np
-import earthsci_toolkit as esm
+import earthsci_ast as esm
 import earthsciio as esio        # EarthSciIO provides the ESS provider seam via
                                  # the duck-typed adapter in _provider_sample_field
                                  # (the Python analog of the Julia weakdep ext);

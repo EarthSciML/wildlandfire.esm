@@ -2,7 +2,7 @@
 # run-model-py.sh — provision a minimal venv and run the Python single-model runner.
 #
 # The Python counterpart of run-model-rs.sh. run-model.py needs the
-# earthsci_toolkit binding (used straight from the sibling EarthSciSerialization
+# earthsci_ast binding (used straight from the sibling EarthSciAST
 # source tree, no install) and the EarthSciIO Python binding (sibling EarthSciIO
 # checkout) for the terrain loader, plus numpy / scipy / sympy / jsonschema and
 # matplotlib for the PNG, and requests / tifffile for EarthSciIO's HTTP transport
@@ -21,7 +21,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-ESS_ROOT="${ESS_ROOT:-$(cd "$HERE/.." && pwd)/EarthSciSerialization}"
+ESS_ROOT="${ESS_ROOT:-$(cd "$HERE/.." && pwd)/EarthSciAST}"
 export ESS_ROOT
 EIO_ROOT="${EIO_ROOT:-$(cd "$HERE/.." && pwd)/EarthSciIO}"
 export EIO_ROOT

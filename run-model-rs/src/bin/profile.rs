@@ -21,9 +21,9 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
-use earthsci_toolkit::parse::load_path_with_options;
-use earthsci_toolkit::provider::{CadenceProvider, NativeField, ProviderError};
-use earthsci_toolkit::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
+use earthsci_ast::parse::load_path_with_options;
+use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
+use earthsci_ast::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
 use ndarray::{ArrayD, IxDyn};
 

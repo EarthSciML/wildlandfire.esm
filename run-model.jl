@@ -16,7 +16,7 @@
 # supplies them by binding EarthSciIO providers to USGS3DEP.raw.elevation,
 # LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r} (plus the ERA5 source geometry, its
 # 0.25° cells placed in the fire metre-frame so the regrid generalizes to a moved/
-# larger domain). Loads through EarthSciSerialization.jl, integrates while saving
+# larger domain). Loads through EarthSciAST.jl, integrates while saving
 # several snapshots, and plots the front over the terrain with the ERA5 wind (PNG).
 #
 # Usage:
@@ -28,16 +28,16 @@
 # Copernicus CDS key in ~/.cdsapirc (the ERA5 loader fetches via the CDS API).
 #
 # Environment: a local project (run-model-jl/) layering Plots.jl + EarthSciIO +
-# TiffImages on top of the dev'd EarthSciSerialization + OrdinaryDiffEqTsit5. Set
+# TiffImages on top of the dev'd EarthSciAST + OrdinaryDiffEqTsit5. Set
 # ESS_ROOT / EIO_ROOT to override the sibling-checkout locations.
 
 import Pkg
 
 const HERE = @__DIR__
 const ESS_ROOT = get(ENV, "ESS_ROOT",
-                     normpath(joinpath(HERE, "..", "EarthSciSerialization")))
+                     normpath(joinpath(HERE, "..", "EarthSciAST")))
 isfile(joinpath(ESS_ROOT, "esm-schema.json")) ||
-    error("EarthSciSerialization not found at '$ESS_ROOT'; set ESS_ROOT or " *
+    error("EarthSciAST not found at '$ESS_ROOT'; set ESS_ROOT or " *
           "clone it as a sibling checkout of this repo.")
 const EIO_ROOT = get(ENV, "EIO_ROOT",
                      normpath(joinpath(HERE, "..", "EarthSciIO", "julia")))
@@ -49,23 +49,23 @@ let env = joinpath(HERE, "run-model-jl")
     mkpath(env)
     Pkg.activate(env; io=devnull)
     if !isfile(joinpath(env, "Manifest.toml"))
-        Pkg.develop(path=joinpath(ESS_ROOT, "packages", "EarthSciSerialization.jl"); io=devnull)
+        Pkg.develop(path=joinpath(ESS_ROOT, "pkg", "EarthSciAST.jl"); io=devnull)
         Pkg.develop(path=EIO_ROOT; io=devnull)
         # DiffEqCallbacks: the DISCRETE-loader refresh callback (PresetTimeCallback that
         # re-samples the time-varying ERA5 met each hour) lives in ESS's
-        # EarthSciSerializationDataRefreshExt, gated on DiffEqCallbacks + SciMLBase.
+        # EarthSciASTDataRefreshExt, gated on DiffEqCallbacks + SciMLBase.
         Pkg.add(["OrdinaryDiffEqTsit5", "Plots", "TiffImages", "DiffEqCallbacks"]; io=devnull)
     end
     Pkg.instantiate(; io=devnull)
 end
 
-using EarthSciSerialization
+using EarthSciAST
 import OrdinaryDiffEqTsit5
 import DiffEqCallbacks             # triggers ESS's DataRefreshExt (discrete-loader refresh)
 using EarthSciIO, TiffImages        # EarthSciIO provides the ESS provider seam via
-using Printf                        # EarthSciSerializationEarthSciIOExt (loaded on `using`);
+using Printf                        # EarthSciASTEarthSciIOExt (loaded on `using`);
 using Plots                         # TiffImages backs EarthSciIO's geotiff reader.
-const ESS = EarthSciSerialization
+const ESS = EarthSciAST
 
 const NT = 6        # number of front snapshots (t = 0 … t_end)
 const NX = 18       # grid cells along x; dx = LX/NX = 2000 m (matches the archive

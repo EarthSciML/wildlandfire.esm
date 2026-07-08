@@ -29,9 +29,9 @@
 import Pkg
 const HERE = @__DIR__
 const ESS_ROOT = get(ENV, "ESS_ROOT",
-                     normpath(joinpath(HERE, "..", "EarthSciSerialization")))
+                     normpath(joinpath(HERE, "..", "EarthSciAST")))
 isfile(joinpath(ESS_ROOT, "esm-schema.json")) ||
-    error("EarthSciSerialization not found at '$ESS_ROOT'.")
+    error("EarthSciAST not found at '$ESS_ROOT'.")
 const EIO_ROOT = get(ENV, "EIO_ROOT", normpath(joinpath(HERE, "..", "EarthSciIO", "julia")))
 isfile(joinpath(EIO_ROOT, "Project.toml")) ||
     error("EarthSciIO (Julia) not found at '$EIO_ROOT'; needed for the data loaders.")
@@ -39,18 +39,18 @@ isfile(joinpath(EIO_ROOT, "Project.toml")) ||
 let env = joinpath(HERE, "profile-jl-env")
     mkpath(env)
     Pkg.activate(env; io=devnull)
-    Pkg.develop(path=joinpath(ESS_ROOT, "packages", "EarthSciSerialization.jl"); io=devnull)
+    Pkg.develop(path=joinpath(ESS_ROOT, "pkg", "EarthSciAST.jl"); io=devnull)
     Pkg.develop(path=EIO_ROOT; io=devnull)
     Pkg.add(["OrdinaryDiffEqTsit5", "TiffImages", "PProf"]; io=devnull)
     Pkg.instantiate(; io=devnull)
 end
 
-using EarthSciSerialization
+using EarthSciAST
 import OrdinaryDiffEqTsit5
 using EarthSciIO, TiffImages     # EarthSciIO provides the ESS provider seam + readers.
 using Profile
 import PProf
-const ESS = EarthSciSerialization
+const ESS = EarthSciAST
 
 if Threads.nthreads() > 1
     @warn "Running with $(Threads.nthreads()) threads; idle worker/GC threads park in " *
