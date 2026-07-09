@@ -232,7 +232,7 @@
           "ref": "../earthscidiscretizations/regridding/conservative_overlap.esm",
           "bindings": {
             "NSRC": 1440,
-            "NTGT": 360,
+            "NTGT": { "op": "*", "args": ["NX", "NY"] },
             "NVERT": 4
           }
         },
@@ -248,8 +248,8 @@
           "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
           "prefix": "tgt",
           "bindings": {
-            "GX": 18,
-            "GY": 20
+            "GX": "NX",
+            "GY": "NY"
           }
         },
         {
@@ -262,7 +262,7 @@
           "ref": "../earthscidiscretizations/regridding/cartesian_nearest_regrid.esm",
           "bindings": {
             "NSRC": 1440,
-            "NTGT": 360,
+            "NTGT": { "op": "*", "args": ["NX", "NY"] },
             "GX_SRC": 36,
             "GY_SRC": 40
           }
@@ -981,7 +981,7 @@
           "prefix": "ov5",
           "bindings": {
             "NSRC": 25,
-            "NTGT": 360,
+            "NTGT": { "op": "*", "args": ["NX", "NY"] },
             "NVERT": 4
           }
         },
@@ -997,8 +997,8 @@
           "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
           "prefix": "e5t",
           "bindings": {
-            "GX": 18,
-            "GY": 20
+            "GX": "NX",
+            "GY": "NY"
           }
         }
       ],
