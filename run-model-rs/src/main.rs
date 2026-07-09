@@ -166,22 +166,42 @@ impl EioDiscreteProvider {
         Ok(Self { var, full, record0, n_records, freq_s, last: None })
     }
 
-    /// The `valid_time` record active at solver-second `t` (clamped in range).
+    /// The FLOOR `valid_time` record (at or before solver-second `t`) — the lower
+    /// of the two bracketing records the model linearly interpolates between.
     fn record_at(&self, t: f64) -> usize {
-        let k = (t / self.freq_s).round() as i64 + self.record0;
+        let k = (t / self.freq_s).floor() as i64 + self.record0;
         k.clamp(0, self.n_records as i64 - 1) as usize
     }
 
-    /// The 3-D `[pressure_level, lat, lon]` slice for record `rec`.
-    fn slice(&self, rec: usize) -> NativeField {
-        NativeField::new(self.full.index_axis(Axis(0), rec).to_owned())
+    /// The 4-D `[valid_time=2, pressure_level, lat, lon]` BRACKET at floor record
+    /// `rec`: records `rec` and `rec+1` stacked on a leading size-2 axis — the
+    /// shape the model's 4-D `Era5Regrid.F_*` reads. At the last record there is no
+    /// successor, so the bracket degenerates to `[rec, rec]` (the model's weight
+    /// then holds the endpoint). Mirrors the EarthSciIO provider's bracket mode.
+    fn bracket(&self, rec: usize) -> NativeField {
+        let rec1 = (rec + 1).min(self.n_records - 1); // end-clamp: hold the last record
+        let r0 = self.full.index_axis(Axis(0), rec);
+        let r1 = self.full.index_axis(Axis(0), rec1);
+        let mut shape = vec![2usize];
+        shape.extend_from_slice(r0.shape());
+        let mut data = Vec::with_capacity(2 * r0.len());
+        data.extend(r0.iter().copied());
+        data.extend(r1.iter().copied());
+        NativeField::new(
+            ArrayD::from_shape_vec(IxDyn(&shape), data).expect("bracket shape"),
+        )
     }
 
-    /// Domain-mean of the slice at solver-second `t` (for the met-varies print).
-    fn mean_at(&self, t: f64) -> f64 {
-        let s = self.full.index_axis(Axis(0), self.record_at(t));
-        let n = s.len().max(1);
-        s.iter().copied().filter(|v| !v.is_nan()).sum::<f64>() / n as f64
+    /// Domain-means of the two bracket records at solver-second `t` (for the print).
+    fn bracket_means(&self, t: f64) -> (f64, f64) {
+        let rec = self.record_at(t);
+        let rec1 = (rec + 1).min(self.n_records - 1);
+        let mean = |r: usize| {
+            let s = self.full.index_axis(Axis(0), r);
+            let n = s.len().max(1);
+            s.iter().copied().filter(|v| !v.is_nan()).sum::<f64>() / n as f64
+        };
+        (mean(rec), mean(rec1))
     }
 }
 
@@ -189,16 +209,16 @@ impl CadenceProvider for EioDiscreteProvider {
     fn materialize(&mut self) -> Result<HashMap<String, NativeField>, ProviderError> {
         let rec = self.record_at(0.0);
         self.last = Some(rec);
-        Ok(HashMap::from([(self.var.clone(), self.slice(rec))]))
+        Ok(HashMap::from([(self.var.clone(), self.bracket(rec))]))
     }
 
     fn refresh(&mut self, t: f64) -> Result<Option<HashMap<String, NativeField>>, ProviderError> {
         let rec = self.record_at(t);
         if self.last == Some(rec) {
-            return Ok(None); // record unchanged — None-skip
+            return Ok(None); // floor record (hence bracket) unchanged — None-skip
         }
         self.last = Some(rec);
-        Ok(Some(HashMap::from([(self.var.clone(), self.slice(rec))])))
+        Ok(Some(HashMap::from([(self.var.clone(), self.bracket(rec))])))
     }
 
     fn refresh_times(&self) -> Vec<f64> {
@@ -295,15 +315,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(geotiff_provider("USGS3DEP", &terrain_url)?));
     providers.insert("LANDFIRE.raw.fuel_model".to_string(),
         Box::new(geotiff_provider("LANDFIRE", &landfire_url)?));
-    // Evidence the met VARIES in time: the domain-mean of each ERA5 field at the
-    // first solver hour (t=0) vs the last (t=t_end) — a DISCRETE loader delivers a
-    // different record per hour, unlike the frozen CONST run.
-    eprintln!("ERA5 discrete cadence (hourly): domain-mean at t=0 vs t={t_end}s");
+    // Evidence the met is time-INTERPOLATED: each solver time now gets the TWO
+    // records bracketing it; print both bracket domain-means at t=0 and t=t_end.
+    // The model blends each bracket linearly (was one piecewise-constant record).
+    eprintln!("ERA5 met is time-INTERPOLATED (2-record bracket): bracket domain-means at t=0 vs t={t_end}s");
     for short in ["t", "u", "v", "r"] {
         let p = era5_provider(short)?;
+        let (a0, b0) = p.bracket_means(0.0);
+        let (ae, be) = p.bracket_means(t_end);
         eprintln!(
-            "  ERA5.pl.{short:<2} record0={} of {} records: mean {:.3} -> {:.3}",
-            p.record0, p.n_records, p.mean_at(0.0), p.mean_at(t_end)
+            "  ERA5.pl.{short:<2} record0={} of {} records: bracket [{:.3}, {:.3}] -> [{:.3}, {:.3}]",
+            p.record0, p.n_records, a0, b0, ae, be
         );
         providers.insert(format!("ERA5.pl.{short}"), Box::new(p));
     }
@@ -353,6 +375,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (k, v) in era5_geom {
         params.insert(k.to_string(), v);
     }
+    // Time-interpolation phase: solver t=0 is the ignition hour (an ERA5 cadence
+    // anchor), so t_interp_ref=0; dt_interp is the hourly ERA5 frequency. The model
+    // computes w = frac((t - t_interp_ref)/dt_interp) to blend each bracket.
+    params.insert("ERA5.t_interp_ref".to_string(), 0.0);
+    params.insert("ERA5.dt_interp".to_string(), 3600.0);
     eprintln!("simulating (0.0, {t_end}) with Erk, {NT} snapshots …");
     // `inspect` captures the build-once geometry so we can read the terrain the
     // model actually used (TerrainRegrid.elev_xy) straight out of the run.

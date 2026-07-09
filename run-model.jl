@@ -135,8 +135,12 @@ providers = try
     # solver tick (time_dim="valid_time"). refresh_times() = era5_times drives the
     # solver's cadence callback, which refreshes the ERA5 forcing (and, via the
     # discrete materializer, the Era5Regrid→behavior stack over it) at each hour.
+    # records_per_sample=2: the provider returns the TWO records bracketing each
+    # solver time (a size-2 valid_time axis), and the model linearly interpolates
+    # between them — a smooth ramp instead of the old piecewise-constant hourly step.
     era5p(v) = EarthSciIO.discrete_provider(cache, era5_url, era5_times;
-                   format="netcdf", variables=[v], auth_realm="cds", time_dim="valid_time")
+                   format="netcdf", variables=[v], auth_realm="cds",
+                   time_dim="valid_time", records_per_sample=2)
     Dict("USGS3DEP.raw.elevation" =>
              EarthSciIO.const_provider(cache, terrain_url;
                  format="geotiff", reader_kwargs=(band_names=["elevation"],)),
@@ -152,13 +156,19 @@ catch err
           "underlying error: $err")
 end
 
-# Confirm the ERA5 met is genuinely time-varying: sample the temperature provider
-# at the ignition hour (t=0) and the window end (t=t_end) and report the change
-# (mean over the 5×5 block). This also warms the CDS fetch before the solve.
+# Confirm the ERA5 met is time-INTERPOLATED: at each solver time the provider now
+# returns the TWO records bracketing it; report both bracket means at t=0 and
+# t=t_end (mean over the 5×5 block). This also warms the CDS fetch before the solve.
 let pt = providers["ERA5.pl.t"]
-    meanT(t) = (nds = EarthSciIO.refresh(pt, t); d = nds.variables["t"].data;
-                Float64(sum(d)) / length(d))
-    @printf("ERA5 met is DISCRETE (hourly): mean 1000 hPa T = %.2f K at t=0 (ignition hr) -> %.2f K at t=%.0f s\n", meanT(0.0), meanT(t_end), t_end)
+    brmeans(t) = begin
+        f = EarthSciIO.refresh(pt, t).variables["t"]
+        pos = findfirst(==("valid_time"), f.dims)
+        r0 = selectdim(f.data, pos, 1); r1 = selectdim(f.data, pos, 2)
+        (Float64(sum(r0)) / length(r0), Float64(sum(r1)) / length(r1))
+    end
+    b0 = brmeans(0.0); be = brmeans(t_end)
+    @printf("ERA5 met is time-INTERPOLATED (2-record bracket): mean 1000 hPa T bracket [%.2f, %.2f] K at t=0 -> [%.2f, %.2f] K at t=%.0f s (model blends each bracket linearly in time)\n",
+            b0[1], b0[2], be[1], be[2], t_end)
 end
 
 # ERA5 src geometry: place the ERA5 sub-grid at its TRUE position in the fire
@@ -184,7 +194,11 @@ sim = ESS.simulate(file, (0.0, t_end);
                    alg=OrdinaryDiffEqTsit5.Tsit5(),
                    providers = providers,
                    parameters = merge(Dict("LevelSetFireSpread.Lx" => LX,
-                                           "LevelSetFireSpread.Ly" => LY),
+                                           "LevelSetFireSpread.Ly" => LY,
+                                           # time-interp phase: t=0 is an ERA5
+                                           # cadence anchor (ignition hour), hourly dt
+                                           "ERA5.t_interp_ref" => 0.0,
+                                           "ERA5.dt_interp" => 3600.0),
                                       era5_geom),
                    reltol=1e-2, abstol=1e-3, saveat=ts, inspect=insp)
 sim.success || error("solver failed: retcode=$(sim.retcode) — $(sim.message)")

@@ -56,7 +56,7 @@
     },
     "era5_t": {
       "kind": "interval",
-      "size": 1
+      "size": 2
     },
     "era5_lev": {
       "kind": "interval",
@@ -1064,425 +1064,49 @@
           "type": "parameter",
           "units": "K",
           "shape": [
+            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa temperature (K) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.t."
+          "description": "ERA5 1000 hPa temperature (K) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.t."
         },
         "F_u": {
           "type": "parameter",
           "units": "m/s",
           "shape": [
+            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa zonal wind u (m/s) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.u."
+          "description": "ERA5 1000 hPa zonal wind u (m/s) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.u."
         },
         "F_v": {
           "type": "parameter",
           "units": "m/s",
           "shape": [
+            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa meridional wind v (m/s) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.v."
+          "description": "ERA5 1000 hPa meridional wind v (m/s) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.v."
         },
         "F_r": {
           "type": "parameter",
           "units": "%",
           "shape": [
+            "era5_t",
             "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa relative humidity (%) on the era5 sub-grid, one hour's slice [pressure_level,lat,lon]=[era5_lev,era5_y,era5_x] (the DISCRETE provider slices valid_time per tick), coupled from ERA5.pl.r."
-        },
-        "F_t_h": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "ov5.src_cells"
-          ],
-          "description": "F_t: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "c"
-            ],
-            "ranges": {
-              "c": {
-                "from": "ov5.src_cells"
-              }
-            },
-            "args": [
-              "F_t"
-            ],
-            "expr": {
-              "op": "index",
-              "args": [
-                "F_t",
-                1,
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "floor",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "c",
-                                1
-                              ]
-                            },
-                            5
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "c",
-                            1
-                          ]
-                        },
-                        {
-                          "op": "*",
-                          "args": [
-                            5,
-                            {
-                              "op": "floor",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "c",
-                                        1
-                                      ]
-                                    },
-                                    5
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "F_u_h": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "ov5.src_cells"
-          ],
-          "description": "F_u: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "c"
-            ],
-            "ranges": {
-              "c": {
-                "from": "ov5.src_cells"
-              }
-            },
-            "args": [
-              "F_u"
-            ],
-            "expr": {
-              "op": "index",
-              "args": [
-                "F_u",
-                1,
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "floor",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "c",
-                                1
-                              ]
-                            },
-                            5
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "c",
-                            1
-                          ]
-                        },
-                        {
-                          "op": "*",
-                          "args": [
-                            5,
-                            {
-                              "op": "floor",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "c",
-                                        1
-                                      ]
-                                    },
-                                    5
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "F_v_h": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "ov5.src_cells"
-          ],
-          "description": "F_v: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "c"
-            ],
-            "ranges": {
-              "c": {
-                "from": "ov5.src_cells"
-              }
-            },
-            "args": [
-              "F_v"
-            ],
-            "expr": {
-              "op": "index",
-              "args": [
-                "F_v",
-                1,
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "floor",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "c",
-                                1
-                              ]
-                            },
-                            5
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "c",
-                            1
-                          ]
-                        },
-                        {
-                          "op": "*",
-                          "args": [
-                            5,
-                            {
-                              "op": "floor",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "c",
-                                        1
-                                      ]
-                                    },
-                                    5
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "F_r_h": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "ov5.src_cells"
-          ],
-          "description": "F_r: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
-          "expression": {
-            "op": "aggregate",
-            "output_idx": [
-              "c"
-            ],
-            "ranges": {
-              "c": {
-                "from": "ov5.src_cells"
-              }
-            },
-            "args": [
-              "F_r"
-            ],
-            "expr": {
-              "op": "index",
-              "args": [
-                "F_r",
-                1,
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "floor",
-                      "args": [
-                        {
-                          "op": "/",
-                          "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "c",
-                                1
-                              ]
-                            },
-                            5
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                },
-                {
-                  "op": "+",
-                  "args": [
-                    {
-                      "op": "-",
-                      "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "c",
-                            1
-                          ]
-                        },
-                        {
-                          "op": "*",
-                          "args": [
-                            5,
-                            {
-                              "op": "floor",
-                              "args": [
-                                {
-                                  "op": "/",
-                                  "args": [
-                                    {
-                                      "op": "-",
-                                      "args": [
-                                        "c",
-                                        1
-                                      ]
-                                    },
-                                    5
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    1
-                  ]
-                }
-              ]
-            }
-          }
+          "description": "ERA5 1000 hPa relative humidity (%) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.r."
         },
         "src_poly": {
           "type": "observed",
@@ -1562,13 +1186,205 @@
             }
           }
         },
-        "t_regridded": {
+        "F_t_h0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 0 (era5_t index 1) of the 2-record time bracket. F_t: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_t"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_t",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_t_h1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 1 (era5_t index 2) of the 2-record time bracket. F_t: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_t"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_t",
+                2,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "t_regridded0": {
           "type": "observed",
           "units": "1",
           "shape": [
             "ov5.tgt_cells"
           ],
-          "description": "F_t_h conservatively regridded onto the fire cells (ov5 weights).",
+          "description": "Bracket record 0: F_t_h conservatively regridded onto the fire cells (ov5 weights).",
           "expression": {
             "op": "apply_expression_template",
             "name": "ov5.conservative_overlap_apply",
@@ -1576,18 +1392,18 @@
             "bindings": {
               "A_ij": "A_ij",
               "A_j": "A_j",
-              "F_src": "F_t_h",
+              "F_src": "F_t_h0",
               "atol": "atol"
             }
           }
         },
-        "u_regridded": {
+        "t_regridded1": {
           "type": "observed",
           "units": "1",
           "shape": [
             "ov5.tgt_cells"
           ],
-          "description": "F_u_h conservatively regridded onto the fire cells (ov5 weights).",
+          "description": "Bracket record 1: F_t_h conservatively regridded onto the fire cells (ov5 weights).",
           "expression": {
             "op": "apply_expression_template",
             "name": "ov5.conservative_overlap_apply",
@@ -1595,57 +1411,19 @@
             "bindings": {
               "A_ij": "A_ij",
               "A_j": "A_j",
-              "F_src": "F_u_h",
+              "F_src": "F_t_h1",
               "atol": "atol"
             }
           }
         },
-        "v_regridded": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "ov5.tgt_cells"
-          ],
-          "description": "F_v_h conservatively regridded onto the fire cells (ov5 weights).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "ov5.conservative_overlap_apply",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "F_v_h",
-              "atol": "atol"
-            }
-          }
-        },
-        "r_regridded": {
-          "type": "observed",
-          "units": "1",
-          "shape": [
-            "ov5.tgt_cells"
-          ],
-          "description": "F_r_h conservatively regridded onto the fire cells (ov5 weights).",
-          "expression": {
-            "op": "apply_expression_template",
-            "name": "ov5.conservative_overlap_apply",
-            "args": [],
-            "bindings": {
-              "A_ij": "A_ij",
-              "A_j": "A_j",
-              "F_src": "F_r_h",
-              "atol": "atol"
-            }
-          }
-        },
-        "t_xy": {
+        "t_xy0": {
           "type": "observed",
           "units": "K",
           "shape": [
             "x",
             "y"
           ],
-          "description": "Per-cell air temperature (K) -> EMC.TEMP.",
+          "description": "Bracket record 0 regridded to [x,y]. Per-cell air temperature (K) -> EMC.TEMP.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -1661,12 +1439,465 @@
               }
             },
             "args": [
-              "t_regridded"
+              "t_regridded0"
             ],
             "expr": {
               "op": "index",
               "args": [
-                "t_regridded",
+                "t_regridded0",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "t_xy1": {
+          "type": "observed",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Bracket record 1 regridded to [x,y]. Per-cell air temperature (K) -> EMC.TEMP.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "t_regridded1"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "t_regridded1",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "t_xy": {
+          "type": "observed",
+          "units": "K",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "TIME-INTERPOLATED per-cell field: linear blend of the two bracketing ERA5 records after each is conservatively regridded to the fire grid — (1-w_time)*t_xy0 + w_time*t_xy1. Because conservative regrid is linear this equals regridding a time-blended field, but keeps the expensive overlap regrid at the discrete hourly cadence and makes only this cheap per-cell blend continuous in t. w_time is coupled from ERA5.w_time. Per-cell air temperature (K) -> EMC.TEMP.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "t_xy0",
+              "t_xy1"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        "w_time"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "t_xy0",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "w_time",
+                    {
+                      "op": "index",
+                      "args": [
+                        "t_xy1",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_u_h0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 0 (era5_t index 1) of the 2-record time bracket. F_u: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_u"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_u",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_u_h1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 1 (era5_t index 2) of the 2-record time bracket. F_u: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_u"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_u",
+                2,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "u_regridded0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Bracket record 0: F_u_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_u_h0",
+              "atol": "atol"
+            }
+          }
+        },
+        "u_regridded1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Bracket record 1: F_u_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_u_h1",
+              "atol": "atol"
+            }
+          }
+        },
+        "u_xy0": {
+          "type": "observed",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Bracket record 0 regridded to [x,y]. Per-cell 10 m east wind (m/s) -> MidflameWind.u_wind.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "u_regridded0"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "u_regridded0",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "u_xy1": {
+          "type": "observed",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Bracket record 1 regridded to [x,y]. Per-cell 10 m east wind (m/s) -> MidflameWind.u_wind.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "u_regridded1"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "u_regridded1",
                 {
                   "op": "+",
                   "args": [
@@ -1697,7 +1928,7 @@
             "x",
             "y"
           ],
-          "description": "Per-cell 10 m east wind (m/s) -> MidflameWind.u_wind.",
+          "description": "TIME-INTERPOLATED per-cell field: linear blend of the two bracketing ERA5 records after each is conservatively regridded to the fire grid — (1-w_time)*u_xy0 + w_time*u_xy1. Because conservative regrid is linear this equals regridding a time-blended field, but keeps the expensive overlap regrid at the discrete hourly cadence and makes only this cheap per-cell blend continuous in t. w_time is coupled from ERA5.w_time. Per-cell 10 m east wind (m/s) -> MidflameWind.u_wind.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -1713,12 +1944,361 @@
               }
             },
             "args": [
-              "u_regridded"
+              "u_xy0",
+              "u_xy1"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        "w_time"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "u_xy0",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "w_time",
+                    {
+                      "op": "index",
+                      "args": [
+                        "u_xy1",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_v_h0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 0 (era5_t index 1) of the 2-record time bracket. F_v: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_v"
             ],
             "expr": {
               "op": "index",
               "args": [
-                "u_regridded",
+                "F_v",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_v_h1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 1 (era5_t index 2) of the 2-record time bracket. F_v: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_v"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_v",
+                2,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "v_regridded0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Bracket record 0: F_v_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_v_h0",
+              "atol": "atol"
+            }
+          }
+        },
+        "v_regridded1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Bracket record 1: F_v_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_v_h1",
+              "atol": "atol"
+            }
+          }
+        },
+        "v_xy0": {
+          "type": "observed",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Bracket record 0 regridded to [x,y]. Per-cell 10 m north wind (m/s) -> MidflameWind.v_wind.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "v_regridded0"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "v_regridded0",
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "gy",
+                            1
+                          ]
+                        },
+                        "NX"
+                      ]
+                    },
+                    "gx"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "v_xy1": {
+          "type": "observed",
+          "units": "m/s",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Bracket record 1 regridded to [x,y]. Per-cell 10 m north wind (m/s) -> MidflameWind.v_wind.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "v_regridded1"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "v_regridded1",
                 {
                   "op": "+",
                   "args": [
@@ -1749,7 +2329,7 @@
             "x",
             "y"
           ],
-          "description": "Per-cell 10 m north wind (m/s) -> MidflameWind.v_wind.",
+          "description": "TIME-INTERPOLATED per-cell field: linear blend of the two bracketing ERA5 records after each is conservatively regridded to the fire grid — (1-w_time)*v_xy0 + w_time*v_xy1. Because conservative regrid is linear this equals regridding a time-blended field, but keeps the expensive overlap regrid at the discrete hourly cadence and makes only this cheap per-cell blend continuous in t. w_time is coupled from ERA5.w_time. Per-cell 10 m north wind (m/s) -> MidflameWind.v_wind.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -1765,43 +2345,288 @@
               }
             },
             "args": [
-              "v_regridded"
+              "v_xy0",
+              "v_xy1"
             ],
             "expr": {
-              "op": "index",
+              "op": "+",
               "args": [
-                "v_regridded",
                 {
-                  "op": "+",
+                  "op": "*",
                   "args": [
                     {
-                      "op": "*",
+                      "op": "-",
                       "args": [
-                        {
-                          "op": "-",
-                          "args": [
-                            "gy",
-                            1
-                          ]
-                        },
-                        "NX"
+                        1,
+                        "w_time"
                       ]
                     },
-                    "gx"
+                    {
+                      "op": "index",
+                      "args": [
+                        "v_xy0",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "w_time",
+                    {
+                      "op": "index",
+                      "args": [
+                        "v_xy1",
+                        "gx",
+                        "gy"
+                      ]
+                    }
                   ]
                 }
               ]
             }
           }
         },
-        "rh_xy": {
+        "F_r_h0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 0 (era5_t index 1) of the 2-record time bracket. F_r: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_r"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_r",
+                1,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "F_r_h1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.src_cells"
+          ],
+          "description": "Bracket record 1 (era5_t index 2) of the 2-record time bracket. F_r: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "c"
+            ],
+            "ranges": {
+              "c": {
+                "from": "ov5.src_cells"
+              }
+            },
+            "args": [
+              "F_r"
+            ],
+            "expr": {
+              "op": "index",
+              "args": [
+                "F_r",
+                2,
+                1,
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "floor",
+                      "args": [
+                        {
+                          "op": "/",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "c",
+                                1
+                              ]
+                            },
+                            5
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                },
+                {
+                  "op": "+",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        {
+                          "op": "-",
+                          "args": [
+                            "c",
+                            1
+                          ]
+                        },
+                        {
+                          "op": "*",
+                          "args": [
+                            5,
+                            {
+                              "op": "floor",
+                              "args": [
+                                {
+                                  "op": "/",
+                                  "args": [
+                                    {
+                                      "op": "-",
+                                      "args": [
+                                        "c",
+                                        1
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "r_regridded0": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Bracket record 0: F_r_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_r_h0",
+              "atol": "atol"
+            }
+          }
+        },
+        "r_regridded1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "ov5.tgt_cells"
+          ],
+          "description": "Bracket record 1: F_r_h conservatively regridded onto the fire cells (ov5 weights).",
+          "expression": {
+            "op": "apply_expression_template",
+            "name": "ov5.conservative_overlap_apply",
+            "args": [],
+            "bindings": {
+              "A_ij": "A_ij",
+              "A_j": "A_j",
+              "F_src": "F_r_h1",
+              "atol": "atol"
+            }
+          }
+        },
+        "rh_xy0": {
           "type": "observed",
           "units": "1",
           "shape": [
             "x",
             "y"
           ],
-          "description": "Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "description": "Bracket record 0 regridded to [x,y]. Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -1817,7 +2642,7 @@
               }
             },
             "args": [
-              "r_regridded"
+              "r_regridded0"
             ],
             "expr": {
               "op": "*",
@@ -1826,7 +2651,7 @@
                 {
                   "op": "index",
                   "args": [
-                    "r_regridded",
+                    "r_regridded0",
                     {
                       "op": "+",
                       "args": [
@@ -1851,6 +2676,137 @@
               ]
             }
           }
+        },
+        "rh_xy1": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Bracket record 1 regridded to [x,y]. Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "r_regridded1"
+            ],
+            "expr": {
+              "op": "*",
+              "args": [
+                0.01,
+                {
+                  "op": "index",
+                  "args": [
+                    "r_regridded1",
+                    {
+                      "op": "+",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            {
+                              "op": "-",
+                              "args": [
+                                "gy",
+                                1
+                              ]
+                            },
+                            "NX"
+                          ]
+                        },
+                        "gx"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "rh_xy": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "TIME-INTERPOLATED per-cell field: linear blend of the two bracketing ERA5 records after each is conservatively regridded to the fire grid — (1-w_time)*rh_xy0 + w_time*rh_xy1. Because conservative regrid is linear this equals regridding a time-blended field, but keeps the expensive overlap regrid at the discrete hourly cadence and makes only this cheap per-cell blend continuous in t. w_time is coupled from ERA5.w_time. Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "rh_xy0",
+              "rh_xy1"
+            ],
+            "expr": {
+              "op": "+",
+              "args": [
+                {
+                  "op": "*",
+                  "args": [
+                    {
+                      "op": "-",
+                      "args": [
+                        1,
+                        "w_time"
+                      ]
+                    },
+                    {
+                      "op": "index",
+                      "args": [
+                        "rh_xy0",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "*",
+                  "args": [
+                    "w_time",
+                    {
+                      "op": "index",
+                      "args": [
+                        "rh_xy1",
+                        "gx",
+                        "gy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "w_time": {
+          "type": "parameter",
+          "units": "1",
+          "default": 0.0,
+          "description": "TIME INTERPOLATION weight in [0,1], coupled from ERA5.w_time (param_to_var). Blends the two bracketing ERA5 records regridded to the fire grid: F_xy = (1-w_time)*F_xy0 + w_time*F_xy1. Continuous in t (ERA5.w_time reads the sim clock), so the met varies smoothly between the hourly ERA5 records instead of the former piecewise-constant hourly step."
         }
       },
       "equations": []
@@ -2094,6 +3050,13 @@
       "to": "MidflameWind.v_wind",
       "transform": "param_to_var",
       "description": "Per-cell ERA5 north wind -> MidflameWind.v_wind."
+    },
+    {
+      "type": "variable_map",
+      "from": "ERA5.w_time",
+      "to": "Era5Regrid.w_time",
+      "transform": "param_to_var",
+      "description": "Time-interpolation weight from the shared ERA5 component -> Era5Regrid's two-record blend. ERA5.w_time = clamp((t - t0_bracket)/(t1_bracket - t0_bracket), 0, 1); t0/t1_bracket are injected per cadence segment by the ESS runtime from the interpolate-mode ERA5 loader's bracket timestamps."
     }
   ]
 }

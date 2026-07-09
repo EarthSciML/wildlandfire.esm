@@ -145,9 +145,14 @@ try:
         ["temperature", "u_component_of_wind", "v_component_of_wind", "relative_humidity"],
         [1000], ERA5_AREA)          # keep all 24 hourly steps (48 records over 2 days)
     era5_url = _enc(_era5.ERA5_DATASET, _req)
+    # records_per_sample=2: the provider returns the TWO records bracketing the
+    # current time (not one floor slice); the model's ERA5.w_time then linearly
+    # interpolates the met in time — a smooth ramp between hourly records instead
+    # of the old piecewise-constant step.
     era5_temporal = esio.LoaderTemporal(
         start=ERA5_START, frequency=timedelta(hours=1),
-        file_period=timedelta(hours=48), time_dim="valid_time")
+        file_period=timedelta(hours=48), time_dim="valid_time",
+        end=ERA5_START + timedelta(hours=48), records_per_sample=2)
     def era5_prov(short):
         return esio.Provider(esio.DataLoader(name="ERA5", format="netcdf", url=era5_url,
             variables=[short], temporal=era5_temporal, auth_realm="cds"),
@@ -157,18 +162,23 @@ try:
         "ERA5.pl.t": era5_prov("t"), "ERA5.pl.u": era5_prov("u"),
         "ERA5.pl.v": era5_prov("v"), "ERA5.pl.r": era5_prov("r"),
     }
-    # Prove the met varies over the run: mean 1000 hPa T at the ignition hour vs
-    # the window end (two different `valid_time` slices of the same fetch).
-    def _mean_era5(prov, when):
-        nds = prov.refresh(when)
+    # Prove the met varies over the run AND is now time-interpolated: at the
+    # ignition hour the provider returns the TWO bracketing hourly records; the
+    # model blends them with a weight that ramps 0→1 over the hour, so the forcing
+    # is continuous rather than a piecewise-constant hourly step.
+    def _bracket_means(prov, when):
+        nds = prov.refresh(when)  # interp mode: shape [valid_time=2, lev, lat, lon]
         name = (nds.variable_names()[0] if hasattr(nds, "variable_names")
                 else next(iter(nds.variables)))
-        return float(np.nanmean(np.asarray(nds[name].data, dtype=float)))
+        d = np.asarray(nds[name].data, dtype=float)
+        return float(np.nanmean(d[0])), float(np.nanmean(d[1]))
     _t_prov = providers["ERA5.pl.t"]
-    print(f"ERA5 DISCRETE hourly met: mean 1000 hPa T "
-          f"{_mean_era5(_t_prov, ERA5_IGNITE):.2f} K @ {ERA5_IGNITE:%Y-%m-%d %H:%M}Z "
-          f"→ {_mean_era5(_t_prov, ERA5_END):.2f} K @ {ERA5_END:%Y-%m-%d %H:%M}Z "
-          f"(varies in-sim)", file=sys.stderr)
+    _r0, _r1 = _bracket_means(_t_prov, ERA5_IGNITE)
+    _e0, _e1 = _bracket_means(_t_prov, ERA5_END)
+    print(f"ERA5 met is time-INTERPOLATED (2-record bracket per tick): mean 1000 hPa T "
+          f"bracket [{_r0:.2f}, {_r1:.2f}] K @ ignition {ERA5_IGNITE:%H:%M}Z "
+          f"→ [{_e0:.2f}, {_e1:.2f}] K @ end {ERA5_END:%H:%M}Z; the model blends each "
+          f"bracket linearly in time (was piecewise-constant hourly)", file=sys.stderr)
 except Exception as err:
     sys.exit(
         f"could not build the terrain/fuel/met providers for {BBOX}\n"
@@ -189,6 +199,12 @@ era5_geom = {
     "Era5Regrid.src_dy": 0.25 * _mlat,
 }
 
+# Time-interpolation phase: the provider loads the two ERA5 records bracketing the
+# current time; ERA5.w_time = frac((t - t_interp_ref)/dt_interp) ramps the blend
+# 0→1 across each hour. Solver t=0 is the ignition hour (an ERA5 cadence anchor),
+# so t_interp_ref=0; dt_interp = the hourly ERA5 frequency.
+era5_interp = {"ERA5.t_interp_ref": 0.0, "ERA5.dt_interp": 3600.0}
+
 print(f"loading    {model_path}  (NX={NX}, NY={NY})")
 file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
 
@@ -202,7 +218,8 @@ print(f"simulating (0.0, {t_end}) with RK45, {NT} snapshots …")
 insp = esm.BuildInspection()
 sim = esm.simulate(
     file, (0.0, t_end),
-    parameters={"LevelSetFireSpread.Lx": LX, "LevelSetFireSpread.Ly": LY, **era5_geom},
+    parameters={"LevelSetFireSpread.Lx": LX, "LevelSetFireSpread.Ly": LY,
+                **era5_geom, **era5_interp},
     method="RK45", rtol=1e-2, atol=1e-3,
     providers=providers, inspect=insp,
 )
