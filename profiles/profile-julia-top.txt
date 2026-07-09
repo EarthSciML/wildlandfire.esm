@@ -1,0 +1,51 @@
+Main binary filename not available.
+Type: events
+Showing nodes accounting for 14728, 70.31% of 20948 total
+Dropped 794 nodes (cum <= 104)
+Showing top 45 nodes out of 193
+      flat  flat%   sum%        cum   cum%
+      1314  6.27%  6.27%      18062 86.22%  [unknown function]
+      1057  5.05% 11.32%       1057  5.05%  _tlv_get_addr
+       850  4.06% 15.38%        859  4.10%  gc_sweep_page (inline)
+       590  2.82% 18.19%       2228 10.64%  jl_table_peek_bp
+       516  2.46% 20.66%        520  2.48%  _jl_invoke (inline)
+       502  2.40% 23.05%        550  2.63%  _setindex! (inline)
+       427  2.04% 25.09%        492  2.35%  MurmurHash3_x64_128
+       390  1.86% 26.95%        390  1.86%  jl_get_pgcstack_static
+       382  1.82% 28.78%        744  3.55%  jl_datatype_layout (inline)
+       375  1.79% 30.57%        377  1.80%  sig_match_fast (inline)
+       366  1.75% 32.31%        554  2.64%  typekeyvalue_eq
+       363  1.73% 34.05%        363  1.73%  jl_is_layout_opaque (inline)
+       343  1.64% 35.68%       5353 25.55%  jl_lookup_generic_ (inline)
+       339  1.62% 37.30%       1199  5.72%  ijl_get_nth_field
+       328  1.57% 38.87%       1318  6.29%  gc_mark_outrefs (inline)
+       320  1.53% 40.40%       1040  4.96%  getindex
+       314  1.50% 41.89%        405  1.93%  obvious_subtype
+       299  1.43% 43.32%        299  1.43%  set_page_metadata (inline)
+       291  1.39% 44.71%        301  1.44%  ijl_egal__bitstag
+       279  1.33% 46.04%        605  2.89%  ijl_new_bits
+       277  1.32% 47.36%        322  1.54%  sig_match_simple
+       269  1.28% 48.65%       3487 16.65%  jl_gc_small_alloc_inner (inline)
+       268  1.28% 49.93%        268  1.28%  int64hash
+       267  1.27% 51.20%       2317 11.06%  jl_typemap_level_assoc_exact
+       265  1.27% 52.47%        265  1.27%  madvise
+       249  1.19% 53.66%        249  1.19%  jl_is_kind (inline)
+       235  1.12% 54.78%        462  2.21%  gc_mark_obj8
+       231  1.10% 55.88%        719  3.43%  compare_fields
+       221  1.05% 56.94%       6183 29.52%  ijl_apply_generic
+       212  1.01% 57.95%        592  2.83%  typekeyvalue_hash (inline)
+       210  1.00% 58.95%        396  1.89%  gc_mark_objarray
+       188   0.9% 59.85%        450  2.15%  jl_field_isptr (inline)
+       185  0.88% 60.73%       1278  6.10%  jl_typemap_entry_assoc_exact
+       184  0.88% 61.61%        691  3.30%  lookup_type_setvalue (inline)
+       181  0.86% 62.47%        181  0.86%  gc_sweep_sysimg
+       179  0.85% 63.33%        694  3.31%  immut_id_
+       176  0.84% 64.17%        434  2.07%  jl_object_id__cold
+       174  0.83% 65.00%        379  1.81%  jl_field_offset (inline)
+       173  0.83% 65.82%        173  0.83%  gc_try_setmark_tag (inline)
+       171  0.82% 66.64%        181  0.86%  ijl_isa
+       167   0.8% 67.44%       1120  5.35%  gc_sweep_pool (inline)
+       160  0.76% 68.20%        160  0.76%  _platform_memcmp
+       152  0.73% 68.93%        558  2.66%  jl_egal__unboxed_ (inline)
+       148  0.71% 69.63%       1069  5.10%  ijl_object_id_ (inline)
+       141  0.67% 70.31%        624  2.98%  memhash_seed

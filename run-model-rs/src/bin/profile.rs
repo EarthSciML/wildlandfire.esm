@@ -7,7 +7,7 @@
 //! binds those loaders as providers exactly like the runner (so the profile
 //! reflects the real coupled workload — the build-time conservative regrid is now a
 //! major cost, not the solve). Samples a single simulate() at the runner's
-//! NX=18, NY=20 grid; t_end via env PROFILE_TEND (default 3600 s — the build
+//! 2×-refined NX=36, NY=40 grid (double the runner's 18×20); t_end via env PROFILE_TEND (default 3600 s — the build
 //! dominates, so a shorter horizon still captures it). Emits, under ../profiles/:
 //!   flamegraph-rust.svg     — inclusive flame graph
 //!   profile-rust-top.txt    — self time by leaf function (what the CPU sat in)
@@ -25,11 +25,11 @@ use earthsci_ast::parse::load_path_with_options;
 use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
 use earthsci_ast::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
-use ndarray::{ArrayD, IxDyn};
+use ndarray::{ArrayD, Axis, IxDyn};
 
 // Grid + domain, identical to the runner (run-model-rs/src/main.rs).
-const NX: i64 = 18;
-const NY: i64 = 20;
+const NX: i64 = 36; // 2×-refined fire grid (double the runner's 18×20)
+const NY: i64 = 40;
 const LX: f64 = 36000.0;
 const LY: f64 = 40000.0;
 const GX: usize = 36;
@@ -75,6 +75,80 @@ impl CadenceProvider for EioConstProvider {
     }
 }
 
+/// A DISCRETE (hourly, time-varying) EarthSciIO provider adapted to the ESS
+/// [`CadenceProvider`] seam — identical to the one run-model-rs uses. It materializes
+/// the whole multi-hour ERA5 file ONCE (`[valid_time, pressure_level, lat, lon]`) and
+/// at each solver-second refresh anchor returns the 2-record `[valid_time=2, …]`
+/// bracket the model's 4-D `Era5Regrid.F_*` reads and time-interpolates.
+struct EioDiscreteProvider {
+    var: String,
+    full: ArrayD<f64>,
+    record0: i64,
+    n_records: usize,
+    freq_s: f64,
+    last: Option<usize>,
+}
+
+impl EioDiscreteProvider {
+    fn new(mut provider: Provider, var: String, record0: i64, freq_s: f64) -> Result<Self, String> {
+        let fields = provider.materialize().map_err(|e| e.to_string())?;
+        if fields.len() != 1 {
+            return Err(format!("ERA5 provider fed {} fields; expected 1", fields.len()));
+        }
+        let (_name, f) = fields.into_iter().next().expect("checked len == 1");
+        let full = match f.data {
+            ArrayData::F64(v) => ArrayD::from_shape_vec(IxDyn(&f.shape), v)
+                .map_err(|e| format!("{var}: {e}"))?,
+            other => return Err(format!("{var}: expected an f64 field, got {:?}", other.dtype())),
+        };
+        let n_records = full.shape().first().copied().unwrap_or(0);
+        Ok(Self { var, full, record0, n_records, freq_s, last: None })
+    }
+
+    /// The FLOOR `valid_time` record (at or before solver-second `t`).
+    fn record_at(&self, t: f64) -> usize {
+        let k = (t / self.freq_s).floor() as i64 + self.record0;
+        k.clamp(0, self.n_records as i64 - 1) as usize
+    }
+
+    /// The 4-D `[valid_time=2, pressure_level, lat, lon]` bracket at floor record
+    /// `rec` (records `rec` and `rec+1`, end-clamped to hold the last record).
+    fn bracket(&self, rec: usize) -> NativeField {
+        let rec1 = (rec + 1).min(self.n_records - 1);
+        let r0 = self.full.index_axis(Axis(0), rec);
+        let r1 = self.full.index_axis(Axis(0), rec1);
+        let mut shape = vec![2usize];
+        shape.extend_from_slice(r0.shape());
+        let mut data = Vec::with_capacity(2 * r0.len());
+        data.extend(r0.iter().copied());
+        data.extend(r1.iter().copied());
+        NativeField::new(ArrayD::from_shape_vec(IxDyn(&shape), data).expect("bracket shape"))
+    }
+}
+
+impl CadenceProvider for EioDiscreteProvider {
+    fn materialize(&mut self) -> Result<HashMap<String, NativeField>, ProviderError> {
+        let rec = self.record_at(0.0);
+        self.last = Some(rec);
+        Ok(HashMap::from([(self.var.clone(), self.bracket(rec))]))
+    }
+
+    fn refresh(&mut self, t: f64) -> Result<Option<HashMap<String, NativeField>>, ProviderError> {
+        let rec = self.record_at(t);
+        if self.last == Some(rec) {
+            return Ok(None); // floor record (hence bracket) unchanged — None-skip
+        }
+        self.last = Some(rec);
+        Ok(Some(HashMap::from([(self.var.clone(), self.bracket(rec))])))
+    }
+
+    fn refresh_times(&self) -> Vec<f64> {
+        (0..self.n_records)
+            .map(|k| (k as i64 - self.record0) as f64 * self.freq_s)
+            .collect()
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = concat!(env!("CARGO_MANIFEST_DIR"), "/../wildlandfire.esm");
     let outdir = concat!(env!("CARGO_MANIFEST_DIR"), "/../profiles");
@@ -94,10 +168,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
          &format=tiff&pixelType=S16&interpolation=+RSP_NearestNeighbor&f=image"
     );
     let [n5, w5, s5, e5] = ERA5_AREA;
+    // DISCRETE ERA5: two days (Nov 8-9) × all 24 hours = 48 valid_time records, so
+    // the provider can return the 2-record bracket the .esm's era5_t axis expects.
+    let all_hours = (0..24).map(|h| format!("\"{h:02}:00\"")).collect::<Vec<_>>().join(",");
     let era5_req = format!(
-        "{{\"area\":[{n5},{w5},{s5},{e5}],\"data_format\":\"netcdf\",\"day\":[\"08\"],\
+        "{{\"area\":[{n5},{w5},{s5},{e5}],\"data_format\":\"netcdf\",\"day\":[\"08\",\"09\"],\
          \"download_format\":\"unarchived\",\"month\":[\"11\"],\"pressure_level\":[\"1000\"],\
-         \"product_type\":[\"reanalysis\"],\"time\":[\"{ERA5_HOUR:02}:00\"],\
+         \"product_type\":[\"reanalysis\"],\"time\":[{all_hours}],\
          \"variable\":[\"relative_humidity\",\"temperature\",\"u_component_of_wind\",\
          \"v_component_of_wind\"],\"year\":[\"2018\"]}}"
     );
@@ -116,9 +193,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Provider::new(DataLoader::new(name, "geotiff", url), cache.clone(), None)
             .map(EioConstProvider).map_err(|e| format!("build {name} provider: {e}"))
     };
-    let era5_provider = |short: &str| -> Result<EioConstProvider, String> {
-        Provider::new(DataLoader::new("ERA5", "netcdf", &era5_url).variables([short]).auth_realm("cds"),
-            cache.clone(), None).map(EioConstProvider).map_err(|e| format!("build ERA5.pl.{short}: {e}"))
+    // ERA5 is DISCRETE: an EioDiscreteProvider per var over the 48-record file.
+    // record0 = ERA5_HOUR (ignition hour → t=0); hourly (3600 s) cadence; returns the
+    // 2-record bracket the model time-interpolates (identical to run-model-rs).
+    let era5_provider = |short: &str| -> Result<EioDiscreteProvider, String> {
+        let loader = DataLoader::new("ERA5", "netcdf", &era5_url).variables([short]).auth_realm("cds");
+        let provider = Provider::new(loader, cache.clone(), None)
+            .map_err(|e| format!("build ERA5.pl.{short}: {e}"))?;
+        EioDiscreteProvider::new(provider, format!("ERA5.pl.{short}"), ERA5_HOUR as i64, 3600.0)
     };
     let mut providers: HashMap<String, Box<dyn CadenceProvider>> = HashMap::new();
     providers.insert("USGS3DEP.raw.elevation".to_string(), Box::new(geotiff_provider("USGS3DEP", &terrain_url)?));
@@ -135,6 +217,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Era5Regrid.src_dx".to_string(), 0.25 * mlon),
         ("Era5Regrid.src_y0".to_string(), (ERA5_AREA[2] as f64 - 0.125 - BBOX_S) * mlat),
         ("Era5Regrid.src_dy".to_string(), 0.25 * mlat),
+        // time-interp phase: t=0 is an ERA5 cadence anchor (ignition hour); hourly dt.
+        ("ERA5.t_interp_ref".to_string(), 0.0),
+        ("ERA5.dt_interp".to_string(), 3600.0),
     ].into_iter().collect();
 
     eprintln!("loading    {model}  (NX={NX}, NY={NY})");

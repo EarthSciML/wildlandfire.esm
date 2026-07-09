@@ -10,8 +10,8 @@
 # profile is unrepresentative of the real coupled workload (the build-time conservative
 # regrid is now the dominant cost, not the solve). Warms up the toolkit import + parse
 # on a throwaway load (sheds one-time first-touch cost), then profiles a single
-# simulate() at the runner's NX=18, NY=20 grid over a SHORT, BOUNDED t_end window
-# (default 30 s; override via argv). Emits, under ./profiles/:
+# simulate() at a 2×-refined NX=36, NY=40 fire grid (double the runner's 18×20) over a
+# BOUNDED t_end window (default 30 s; override via argv). Emits, under ./profiles/:
 #   profile-python-top.txt   — self time by function (analog of the Rust/Julia -top)
 #   profile-python-tree.txt  — pyinstrument call tree (self + total time per frame)
 #   profile-python.speedscope.json — compact flame graph for https://speedscope.app
@@ -19,16 +19,16 @@
 # Why pyinstrument. Statistical sampling profiler (like the Julia stdlib sampler and
 # Rust's pprof-rs): it snapshots the Python stack via a signal timer FROM INSIDE the
 # process, so unlike cProfile it does not instrument every call, and unlike py-spy it
-# needs no root on macOS. The build-time regrid (s2 intersect_polygon over 1440×360
+# needs no root on macOS. The build-time regrid (s2 intersect_polygon over 1440×1440
 # source×target cells) shows as self-time of the earthsciio / interpreter frames; the
 # per-cell RHS AST walk shows as the earthsci_ast interpreter frames — so the
 # build-vs-solve and RHS-vs-solver splits are visible.
 #
-# Why a very short window. Python's per-cell AST interpreter plus implicit LSODA is
-# orders of magnitude slower than the compiled Julia (Tsit5) / Rust (Erk) paths, AND
-# the one-time build (loader regrid) already dominates a short run — so a small t_end
-# is deliberate. The build is t_end-independent; a longer window only adds LSODA steps.
-# Pass a larger t_end as argv[1] to sample more of the solve.
+# Solver + window. Uses the explicit RK45 (Dormand-Prince 5(4)) — the SciPy analog of
+# Julia's Tsit5 / Rust's Erk, matching run-model.py (the level-set Hamiltonian is
+# hyperbolic, non-stiff). Python's per-cell AST interpreter is still far slower than the
+# compiled paths, and the one-time build (loader regrid) is t_end-independent, so a
+# modest window already captures it; a larger t_end (argv[1]) samples more of the solve.
 #
 # Requires a network connection (3DEP + LANDFIRE, no auth) and a Copernicus CDS key in
 # ~/.cdsapirc (ERA5) on the first run; subsequent runs read the warmed cache.
@@ -42,6 +42,7 @@
 import os
 import sys
 import time
+from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ESS_ROOT = os.environ.get(
@@ -72,14 +73,19 @@ outdir = os.path.join(HERE, "profiles")
 os.makedirs(outdir, exist_ok=True)
 model_path = os.path.join(HERE, "wildlandfire.esm")
 
-# --- Grid + domain, identical to the runner (run-model.py). ------------------
-NX, NY = 18, 20
+# --- Grid + domain. Fire grid 2×-refined (36×40) vs the runner's 18×20. -------
+NX, NY = 36, 40
 LX, LY = 36000.0, 40000.0
 BBOX_W, BBOX_S, BBOX_E, BBOX_N = -121.7400, 39.6049, -121.3192, 39.9651
 BBOX = f"{BBOX_W},{BBOX_S},{BBOX_E},{BBOX_N}"
 GX, GY = 36, 40
-ERA5_AREA = [40, -122, 39, -121]
-ERA5_DATE, ERA5_HOUR = (2018, 11, 8), "14:00"
+ERA5_AREA = [40, -122, 39, -121]        # [N,W,S,E] — 1° box → 5×5 cells @ 0.25°
+ERA5_NX, ERA5_NY = 5, 5
+ERA5_YEAR, ERA5_MONTH = 2018, 11        # Camp Fire ignition month
+ERA5_DAYS = [8, 9]                      # ignition day + next (48 hourly records)
+ERA5_START = datetime(2018, 11, 8, 0, 0)     # loader epoch (cadence anchor)
+ERA5_IGNITE = datetime(2018, 11, 8, 14, 0)   # ignition hour = solver t=0 (UTC)
+ERA5_END = datetime(2018, 11, 9, 6, 0)       # run-window end (UTC)
 
 # --- The three real data-loader providers (cached after the first run). ------
 esio.register_format_readers()
@@ -94,16 +100,24 @@ landfire_url = (
     f"ImageServer/exportImage?bbox={BBOX}&bboxSR=4326&imageSR=4326&size={GX},{GY}"
     "&format=tiff&pixelType=S16&interpolation=+RSP_NearestNeighbor&f=image"
 )
-_req = _era5.era5_request(ERA5_DATE[0], ERA5_DATE[1], [ERA5_DATE[2]],
+_req = _era5.era5_request(ERA5_YEAR, ERA5_MONTH, ERA5_DAYS,
     ["temperature", "u_component_of_wind", "v_component_of_wind", "relative_humidity"],
-    [1000], ERA5_AREA)
-_req["time"] = [ERA5_HOUR]
+    [1000], ERA5_AREA)          # all 24 hourly steps → 48 records over the two days
 era5_url = _enc(_era5.ERA5_DATASET, _req)
+# DISCRETE, records_per_sample=2: the provider returns the TWO records bracketing
+# each solver time and the model time-interpolates (ERA5.w_time). Identical to
+# run-model.py, so the profiled solve now includes the per-tick refresh + time-blend
+# (the .esm's era5_t axis is size 2 — a single-record provider no longer matches it).
+era5_temporal = esio.LoaderTemporal(
+    start=ERA5_START, frequency=timedelta(hours=1),
+    file_period=timedelta(hours=48), time_dim="valid_time",
+    end=ERA5_START + timedelta(hours=48), records_per_sample=2)
 
 
 def era5_prov(short):
     return esio.Provider(esio.DataLoader(name="ERA5", format="netcdf", url=era5_url,
-        variables=[short], temporal=None, auth_realm="cds"), cache)
+        variables=[short], temporal=era5_temporal, auth_realm="cds"),
+        cache, window=(ERA5_IGNITE, ERA5_END))
 
 
 PROVIDERS = {
@@ -123,12 +137,14 @@ PARAMS = {
     "Era5Regrid.src_dx": 0.25 * _mlon,
     "Era5Regrid.src_y0": (ERA5_AREA[2] - 0.125 - BBOX_S) * _mlat,
     "Era5Regrid.src_dy": 0.25 * _mlat,
+    # time-interp phase: t=0 is an ERA5 cadence anchor (ignition hour); hourly dt.
+    "ERA5.t_interp_ref": 0.0, "ERA5.dt_interp": 3600.0,
 }
 
 
 def simulate(file, tend):
     return esm.simulate(file, (0.0, tend), parameters=PARAMS, providers=PROVIDERS,
-                        method="LSODA", rtol=1e-2, atol=1e-3)
+                        method="RK45", rtol=1e-2, atol=1e-3)
 
 
 print(f"loading    wildlandfire.esm  (NX={NX}, NY={NY})")
@@ -147,7 +163,7 @@ print(f"done in {tw:.1f}s")
 
 file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
 
-print(f"profiling simulate (0.0, {t_end}) with LSODA … ", end="", flush=True)
+print(f"profiling simulate (0.0, {t_end}) with RK45 … ", end="", flush=True)
 profiler = Profiler(interval=0.001)  # 1 ms sampling
 t0 = time.perf_counter()
 profiler.start()
@@ -161,7 +177,7 @@ if not sim.success:
 session = profiler.last_session
 n_samples = getattr(session, "sample_count", "?")
 header = (
-    f"# NX={NX} NY={NY}  t_end={t_end}  wall={tp:.2f}s  solver=LSODA (scipy)\n"
+    f"# NX={NX} NY={NY}  t_end={t_end}  wall={tp:.2f}s  solver=RK45 (scipy)\n"
     f"# three real loaders (3DEP + LANDFIRE + ERA5), regridded in-model\n"
     f"# pyinstrument statistical sampler @ 1 ms; {n_samples} samples; "
     f"CPU time {session.cpu_time:.2f}s\n"

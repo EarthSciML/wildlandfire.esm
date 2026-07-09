@@ -9,7 +9,7 @@
 # those loaders as providers exactly like the runner, so the profile reflects the real
 # coupled workload (the build-time conservative regrid is now a major cost). Warms up
 # once (so JIT compilation is NOT profiled), then samples a single simulate() at the
-# runner's NX=18, NY=20 grid. Emits, under ./profiles/:
+# 2×-refined NX=36, NY=40 fire grid (double the runner's 18×20). Emits, under ./profiles/:
 #   flamegraph-julia.svg   — pprof flame graph (inclusive)
 #   profile-julia-top.txt  — pprof -top (self time by function)
 #   profile-julia-flat.txt — stdlib Profile flat list (cross-check, C frames on)
@@ -39,14 +39,21 @@ isfile(joinpath(EIO_ROOT, "Project.toml")) ||
 let env = joinpath(HERE, "profile-jl-env")
     mkpath(env)
     Pkg.activate(env; io=devnull)
-    Pkg.develop(path=joinpath(ESS_ROOT, "pkg", "EarthSciAST.jl"); io=devnull)
-    Pkg.develop(path=EIO_ROOT; io=devnull)
-    Pkg.add(["OrdinaryDiffEqTsit5", "TiffImages", "PProf"]; io=devnull)
+    if !isfile(joinpath(env, "Manifest.toml"))   # build once; reuse thereafter (like run-model.jl)
+        Pkg.develop(path=joinpath(ESS_ROOT, "pkg", "EarthSciAST.jl"); io=devnull)
+        Pkg.develop(path=EIO_ROOT; io=devnull)
+        # DiffEqCallbacks: triggers ESS's EarthSciASTDataRefreshExt so the DISCRETE
+        # ERA5 provider's hourly refresh callback fires during the profiled solve
+        # (matches run-model.jl; the old const-provider profile did not need it).
+        # pprof_jll: the pprof CLI used below to render profile-julia-top.txt + the SVG.
+        Pkg.add(["OrdinaryDiffEqTsit5", "TiffImages", "PProf", "DiffEqCallbacks", "pprof_jll"]; io=devnull)
+    end
     Pkg.instantiate(; io=devnull)
 end
 
 using EarthSciAST
 import OrdinaryDiffEqTsit5
+import DiffEqCallbacks           # triggers ESS's DataRefreshExt (discrete-loader refresh)
 using EarthSciIO, TiffImages     # EarthSciIO provides the ESS provider seam + readers.
 using Profile
 import PProf
@@ -58,7 +65,7 @@ if Threads.nthreads() > 1
           "`julia --threads=1 profile-jl.jl`."
 end
 
-const NX, NY = 18, 20
+const NX, NY = 36, 40    # 2×-refined fire grid (double the runner's 18×20)
 t_end = length(ARGS) >= 1 ? parse(Float64, ARGS[1]) : 3600.0   # 1 h (Julia is fast)
 outdir = joinpath(HERE, "profiles"); mkpath(outdir)
 alg = OrdinaryDiffEqTsit5.Tsit5()
@@ -69,8 +76,11 @@ const LX, LY = 36000.0, 40000.0
 const GX, GY = 36, 40
 const BBOX_W, BBOX_S, BBOX_E, BBOX_N = -121.7400, 39.6049, -121.3192, 39.9651
 const BBOX = "$BBOX_W,$BBOX_S,$BBOX_E,$BBOX_N"
-const ERA5_AREA = [40, -122, 39, -121]
-const ERA5_YEAR, ERA5_MONTH, ERA5_DAY, ERA5_HOUR = 2018, 11, 8, 14
+const ERA5_AREA = [40, -122, 39, -121]   # [N,W,S,E] — 1° box → 5×5 cells @ 0.25°
+const ERA5_YEAR, ERA5_MONTH = 2018, 11
+const ERA5_DAYS = [8, 9]                 # ignition day + next (48 hourly records)
+const ERA5_HOURS = 0:23                  # native HOURLY cadence → 48 records over 2 days
+const ERA5_IGNITION_REC = 14             # 0-based valid_time index of 14:00 UTC day-8 (t=0)
 
 cache = EarthSciIO.Cache()
 terrain_url =
@@ -83,8 +93,15 @@ landfire_url =
     "&format=tiff&pixelType=S16&interpolation=+RSP_NearestNeighbor&f=image"
 era5_url = EarthSciIO.era5_pressure_url(ERA5_YEAR, ERA5_MONTH;
     variables=["relative_humidity", "temperature", "u_component_of_wind", "v_component_of_wind"],
-    pressure_levels=[1000], days=[ERA5_DAY], times=[ERA5_HOUR], area=ERA5_AREA)
-era5p(v) = EarthSciIO.const_provider(cache, era5_url; format="netcdf", variables=[v], auth_realm="cds")
+    pressure_levels=[1000], days=ERA5_DAYS, times=ERA5_HOURS, area=ERA5_AREA)
+const ERA5_NREC  = length(ERA5_DAYS) * length(ERA5_HOURS)                 # 48
+const era5_times = [(k - ERA5_IGNITION_REC) * 3600.0 for k in 0:(ERA5_NREC - 1)]
+# DISCRETE, records_per_sample=2: the two records bracketing each solver time; the
+# model blends them (ERA5.w_time). Identical to run-model.jl, so the profiled solve
+# includes the per-tick refresh + time-blend (the .esm's era5_t axis is size 2).
+era5p(v) = EarthSciIO.discrete_provider(cache, era5_url, era5_times;
+    format="netcdf", variables=[v], auth_realm="cds",
+    time_dim="valid_time", records_per_sample=2)
 providers = Dict(
     "USGS3DEP.raw.elevation" => EarthSciIO.const_provider(cache, terrain_url;
         format="geotiff", reader_kwargs=(band_names=["elevation"],)),
@@ -97,7 +114,9 @@ params = Dict("LevelSetFireSpread.Lx" => LX, "LevelSetFireSpread.Ly" => LY,
     "Era5Regrid.src_x0" => (ERA5_AREA[2] - 0.125 - BBOX_W) * mlon,
     "Era5Regrid.src_dx" => 0.25 * mlon,
     "Era5Regrid.src_y0" => (ERA5_AREA[3] - 0.125 - BBOX_S) * mlat,
-    "Era5Regrid.src_dy" => 0.25 * mlat)
+    "Era5Regrid.src_dy" => 0.25 * mlat,
+    # time-interp phase: t=0 is an ERA5 cadence anchor (ignition hour); hourly dt.
+    "ERA5.t_interp_ref" => 0.0, "ERA5.dt_interp" => 3600.0)
 
 sim_once(tend) = ESS.simulate(file, (0.0, tend); alg=alg, providers=providers,
                               parameters=params, reltol=1e-2, abstol=1e-3)

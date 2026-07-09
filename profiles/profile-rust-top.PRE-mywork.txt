@@ -1,0 +1,45 @@
+# Rust simulate() self-time by leaf function
+# NX=18 NY=20  t_end=3600  wall=115.1s  solver=Erk (diffsol)
+# three real loaders (3DEP + LANDFIRE + ERA5), regridded in-model
+# 1064 samples @ 997 Hz
+#  self%   samples  function
+  54.79       583  earthsci_ast::simulate_array::eval::eval_arrayop
+  27.07       288  alloc::alloc::dealloc_nonnull
+   5.55        59  earthsci_ast::simulate_array::eval::reduce_contraction
+   3.57        38  earthsci_ast::simulate_array::eval::eval_index
+   0.94        10  earthsci_ast::simulate_array::eval::eval_binary
+   0.85         9  earthsci_ast::simulate_array::eval::eval_index::{{closure}}
+   0.75         8  alloc::vec::Vec<T,A>::push_mut
+   0.75         8  earthsci_ast::simulate_array::eval::reduce_contraction::{{closure}}
+   0.66         7  core::ptr::copy_nonoverlapping
+   0.56         6  ndarray::dimension::dim::Dim
+   0.47         5  <smallvec::SmallVec<A> as core::iter::traits::collect::FromIterator<<A as smallvec::Array>::Item>>::from_iter
+   0.38         4  alloc::alloc::alloc
+   0.38         4  <T as alloc::slice::<impl [T]>::to_vec_in::ConvertVec>::to_vec
+   0.28         3  <A as core::slice::cmp::SlicePartialEq<B>>::equal_same_length
+   0.19         2  earthsci_ast::simulate_array::eval::eval_clip_operands
+   0.19         2  std::collections::hash::map::HashMap<K,V,S,A>::insert
+   0.19         2  core::ptr::drop_in_place<smallvec::SmallVec<[earthsci_ast::simulate_array::Value; 4]>>
+   0.19         2  core::ptr::drop_in_place<earthsci_ast::types::ExpressionNode>
+   0.19         2  earthsci_ast::simulate_array::eval::filter_excludes
+   0.19         2  <unknown>
+   0.09         1  ndarray::impl_methods::<impl ndarray::ArrayBase<S,D>>::is_contiguous
+   0.09         1  <smallvec::SmallVec<A> as core::iter::traits::collect::Extend<<A as smallvec::Array>::Item>>::extend
+   0.09         1  alloc::raw_vec::RawVecInner<A>::try_allocate_in
+   0.09         1  <earthsci_ast::types::ExpressionNode as core::clone::Clone>::clone
+   0.09         1  ring::ec::keys::Seed::generate
+   0.09         1  earthsci_ast::simulate_array::eval::eval_unary
+   0.09         1  ndarray::impl_methods::<impl ndarray::ArrayBase<S,D>>::stride_of
+   0.09         1  hashbrown::raw::RawTable<T,A>::reserve
+   0.09         1  <diffsol::ode_solver::explicit_rk::ExplicitRk<Eqn,M,AugmentedEqn> as diffsol::ode_solver::method::OdeSolverMethod<Eqn>>::step
+   0.09         1  earthsci_ast::geometry::intersect_polygon
+   0.09         1  core::ptr::drop_in_place<rustls::conn::ConnectionCommon<rustls::client::client_conn::ClientConnectionData>>
+   0.09         1  alloc::slice::<impl [T]>::to_vec_in
+   0.09         1  alloc::raw_vec::RawVecInner<A>::finish_grow
+   0.09         1  <tokio_rustls::common::Stream<IO,C> as tokio::io::async_write::AsyncWrite>::poll_flush
+   0.09         1  earthsci_ast::simulate_array::eval::eval_arith::{{closure}}
+   0.09         1  <rustls::msgs::message::PlainMessage as core::convert::From<rustls::msgs::message::Message>>::from
+   0.09         1  ndarray::impl_methods::<impl ndarray::ArrayBase<S,D>>::index_axis_move
+   0.09         1  <alloc::vec::into_iter::IntoIter<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>> as core::ops::drop::Drop>::drop
+   0.09         1  core::iter::traits::iterator::Iterator::find
+   0.09         1  core::ptr::drop_in_place<diffsol::ode_solver::explicit_rk::ExplicitRk<diffsol::ode_equations::OdeSolverEquations<diffsol::matrix::dense_faer_serial::FaerMat<f64>,diffsol::op::closure::Closure<diffsol::matrix::dense_faer_serial::FaerMat<f64>,earthsci_ast::simulate_array::driver::<impl earthsci_ast::simulate_array::ArrayCompiled>::simulate_inspect::{{closure}},earthsci_ast::simulate_array::driver::<impl earthsci_ast::simulate_array::ArrayCompiled>::simulate_inspect::{{closure}}>,diffsol::op::constant_closure::ConstantClosure<diffsol::matrix::dense_faer_serial::FaerMat<f64>,earthsci_ast::simulate_array::driver::<impl earthsci_ast::simulate_array::ArrayCompiled>::simulate_inspect::{{closure}}>,diffsol::op::unit::UnitCallable<diffsol::matrix::dense_faer_serial::FaerMat<f64>>,diffsol::op::unit::UnitCallable<diffsol::matrix::dense_faer_serial::FaerMat<f64>>,diffsol::op::unit::UnitCallable<diffsol::matrix::dense_faer_serial::FaerMat<f64>>>,diffsol::matrix::dense_faer_serial::FaerMat<f64>>>

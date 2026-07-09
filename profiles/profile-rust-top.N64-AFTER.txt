@@ -1,0 +1,39 @@
+# Rust simulate() self-time by leaf function
+# NX=NY=64  t_end=57600  wall=21.1s  solver=Erk (diffsol)
+# 1749 samples @ 997 Hz
+#  self%   samples  function
+  38.14       667  <smallvec::SmallVec<A> as core::iter::traits::collect::FromIterator<<A as smallvec::Array>::Item>>::from_iter
+  30.53       534  earthsci_ast::simulate_array::eval_arith::{{closure}}
+   4.06        71  core::ptr::drop_in_place<smallvec::SmallVec<[earthsci_ast::simulate_array::Value; 4]>>
+   3.77        66  core::hash::Hasher::write_u8
+   3.43        60  earthsci_ast::simulate_array::eval_index::{{closure}}
+   3.09        54  <core::hash::sip::Hasher<S> as core::hash::Hasher>::write_str
+   1.54        27  std::collections::hash::map::HashMap<K,V,S,A>::insert
+   1.54        27  earthsci_ast::simulate_array::eval_arrayop
+   1.49        26  earthsci_ast::simulate_array::reduce_contraction
+   1.49        26  earthsci_ast::simulate_array::eval_index
+   1.49        26  ndarray::dimension::dim::Dim
+   1.37        24  alloc::alloc::alloc
+   1.32        23  alloc::alloc::dealloc_nonnull
+   1.09        19  earthsci_ast::simulate_array::eval_unary
+   0.97        17  core::ptr::copy_nonoverlapping
+   0.80        14  alloc::vec::Vec<T,A>::push_mut
+   0.74        13  hashbrown::map::make_hash
+   0.34         6  <T as alloc::slice::<impl [T]>::to_vec_in::ConvertVec>::to_vec
+   0.34         6  earthsci_ast::simulate_array::combine::{{closure}}
+   0.29         5  core::ptr::drop_in_place<earthsci_ast::types::ExpressionNode>
+   0.29         5  <A as core::slice::cmp::SlicePartialEq<B>>::equal_same_length
+   0.29         5  earthsci_ast::simulate_array::evaluate_rhs_with_scratch
+   0.29         5  alloc::raw_vec::RawVecInner<A>::grow_amortized
+   0.23         4  alloc::raw_vec::RawVecInner<A>::finish_grow
+   0.17         3  <f64>::powf
+   0.17         3  diffsol::ode_solver::runge_kutta::Rk<Eqn,M>::do_stage
+   0.11         2  alloc::raw_vec::RawVecInner<A>::try_allocate_in
+   0.11         2  <earthsci_ast::types::ExpressionNode as core::clone::Clone>::clone
+   0.11         2  <alloc::vec::Vec<T> as alloc::vec::spec_from_iter::SpecFromIter<T,I>>::from_iter
+   0.11         2  <unknown>
+   0.06         1  earthsci_ast::simulate_array::run_solver
+   0.06         1  core::ptr::write
+   0.06         1  earthsci_ast::simulate_array::col_major_to_arrayd
+   0.06         1  diffsol::ode_solver::explicit_rk::ExplicitRk<Eqn,M,AugmentedEqn>::new
+   0.06         1  core::ptr::drop_in_place<hashbrown::raw::RawTable<(alloc::string::String,earthsci_ast::types::RangeSpec)>>

@@ -1,0 +1,40 @@
+# Rust simulate() self-time by leaf function
+# NX=NY=64  t_end=57600  wall=11.3s  solver=Erk (diffsol)
+# 498 samples @ 997 Hz
+#  self%   samples  function
+  24.70       123  <smallvec::SmallVec<A> as core::iter::traits::collect::FromIterator<<A as smallvec::Array>::Item>>::from_iter
+  19.68        98  earthsci_ast::simulate_array::eval_arith::{{closure}}
+  13.45        67  earthsci_ast::simulate_array::eval_index
+  13.25        66  earthsci_ast::simulate_array::eval_index::{{closure}}
+   6.63        33  ndarray::dimension::dim::Dim
+   2.61        13  core::ptr::copy_nonoverlapping
+   2.21        11  core::ptr::drop_in_place<earthsci_ast::types::ExpressionNode>
+   2.01        10  core::ptr::drop_in_place<smallvec::SmallVec<[earthsci_ast::simulate_array::Value; 4]>>
+   1.61         8  earthsci_ast::simulate_array::eval_arrayop
+   1.41         7  earthsci_ast::simulate_array::combine::{{closure}}
+   1.41         7  alloc::alloc::dealloc_nonnull
+   1.41         7  alloc::alloc::alloc
+   1.20         6  <A as core::slice::cmp::SlicePartialEq<B>>::equal_same_length
+   1.20         6  <T as alloc::slice::<impl [T]>::to_vec_in::ConvertVec>::to_vec
+   0.80         4  earthsci_ast::simulate_array::evaluate_rhs_with_scratch
+   0.60         3  core::ptr::drop_in_place<[earthsci_ast::simulate_array::RhsRule]>
+   0.60         3  alloc::vec::Vec<T,A>::push_mut
+   0.60         3  alloc::raw_vec::RawVecInner<A>::try_allocate_in
+   0.60         3  earthsci_ast::simulate_array::reduce_contraction
+   0.40         2  <A as core::slice::cmp::SliceOrd>::compare
+   0.40         2  <earthsci_ast::types::ExpressionNode as core::clone::Clone>::clone
+   0.40         2  std::collections::hash::map::HashMap<K,V,S,A>::insert
+   0.20         1  diffsol::ode_solver::explicit_rk::ExplicitRk<Eqn,M,AugmentedEqn>::new
+   0.20         1  earthsci_ast::simulate_array::eval_makearray
+   0.20         1  earthsci_ast::flatten::substitute_var::{{closure}}
+   0.20         1  diffsol::ode_solver::builder::OdeBuilder<M,Rhs,Init,Mass,Root,Out,Reset>::new
+   0.20         1  faer::col::colmut::<impl faer::col::generic::Col<Inner>>::copy_from
+   0.20         1  diffsol::ode_solver::state::OdeSolverState::new
+   0.20         1  <core::hash::sip::Hasher<S> as core::hash::Hasher>::write_str
+   0.20         1  <f64>::powf
+   0.20         1  earthsci_ast::simulate_array::materialize_observeds_into
+   0.20         1  <alloc::vec::Vec<T> as alloc::vec::spec_from_iter::SpecFromIter<T,I>>::from_iter
+   0.20         1  earthsci_ast::simulate_array::eval_unary
+   0.20         1  alloc::raw_vec::RawVecInner<A>::grow_amortized
+   0.20         1  earthsci_ast::simulate::fold_constant_expr
+   0.20         1  alloc::raw_vec::RawVecInner<A>::finish_grow

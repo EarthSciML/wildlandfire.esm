@@ -1,0 +1,39 @@
+# Rust simulate() self-time by leaf function
+# NX=NY=64  t_end=57600  wall=26.7s  solver=Erk (diffsol)
+# 1411 samples @ 997 Hz
+#  self%   samples  function
+  28.70       405  earthsci_ast::simulate_array::eval_broadcast::{{closure}}
+  14.74       208  <alloc::vec::Vec<T> as alloc::vec::spec_from_iter::SpecFromIter<T,I>>::from_iter
+  11.34       160  core::hash::Hasher::write_u8
+   7.44       105  alloc::alloc::alloc
+   5.03        71  core::ptr::drop_in_place<alloc::vec::Vec<earthsci_ast::simulate_array::Value>>
+   4.54        64  <core::hash::sip::Hasher<S> as core::hash::Hasher>::write_str
+   4.18        59  alloc::alloc::dealloc_nonnull
+   3.33        47  hashbrown::map::make_hash
+   2.91        41  earthsci_ast::simulate_array::eval_index::{{closure}}
+   2.34        33  earthsci_ast::simulate_array::eval_arrayop
+   2.13        30  alloc::raw_vec::RawVecInner<A>::try_allocate_in
+   1.77        25  earthsci_ast::simulate_array::eval_arith
+   1.70        24  ndarray::dimension::dim::Dim
+   1.13        16  earthsci_ast::simulate_array::reduce_contraction
+   1.06        15  <T as alloc::slice::<impl [T]>::to_vec_in::ConvertVec>::to_vec
+   0.92        13  earthsci_ast::simulate_array::eval_index
+   0.92        13  alloc::vec::Vec<T,A>::push_mut
+   0.85        12  earthsci_ast::simulate_array::eval_unary
+   0.64         9  core::ptr::copy_nonoverlapping
+   0.64         9  alloc::raw_vec::RawVecInner<A>::grow_amortized
+   0.64         9  <f64>::powf
+   0.57         8  std::collections::hash::map::HashMap<K,V,S,A>::insert
+   0.57         8  <A as core::slice::cmp::SlicePartialEq<B>>::equal_same_length
+   0.35         5  earthsci_ast::simulate_array::combine::{{closure}}
+   0.28         4  earthsci_ast::simulate_array::evaluate_rhs_with_scratch
+   0.21         3  core::iter::traits::iterator::Iterator::for_each
+   0.21         3  <unknown>
+   0.21         3  earthsci_ast::simulate_array::vec_combine::{{closure}}
+   0.14         2  core::ptr::drop_in_place<earthsci_ast::types::ExpressionNode>
+   0.14         2  alloc::raw_vec::RawVecInner<A>::finish_grow
+   0.07         1  faer::linalg::matmul::matmul_imp
+   0.07         1  faer::Par::rayon
+   0.07         1  earthsci_ast::simulate_array::col_major_to_arrayd
+   0.07         1  <earthsci_ast::types::ExpressionNode as core::clone::Clone>::clone
+   0.07         1  <A as core::slice::cmp::SliceOrd>::compare

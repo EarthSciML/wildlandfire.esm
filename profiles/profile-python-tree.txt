@@ -1,0 +1,1094 @@
+# Python simulate() call tree (pyinstrument; self + total time)
+# NX=36 NY=40  t_end=7200.0  wall=8.10s  solver=RK45 (scipy)
+# three real loaders (3DEP + LANDFIRE + ERA5), regridded in-model
+# pyinstrument statistical sampler @ 1 ms; 6945 samples; CPU time 7.07s
+
+
+  _     ._   __/__   _ _  _  _ _/_   Recorded: 15:57:49  Samples:  6945
+ /_//_/// /_\ / //_// / //_'/ //     Duration: 8.101     CPU time: 7.068
+/   _/                      v5.1.2
+
+Profile at /Users/ctessum/code/earthsciml/wildlandfire.esm/profile-py.py:169
+
+8.100 <module>  profile-py.py:1
+├─ 8.099 simulate  profile-py.py:145
+│  └─ 8.099 simulate  earthsci_ast/simulation.py:161
+│     ├─ 7.517 _simulate_with_discrete_providers  earthsci_ast/simulation_loaders.py:701
+│     │  ├─ 6.476 _run_cadence_segmented_solve  earthsci_ast/simulation_loaders.py:330
+│     │  │  ├─ 6.105 _build_numpy_rhs  earthsci_ast/simulation_array.py:1066
+│     │  │  │  ├─ 5.088 _materialize_observeds  earthsci_ast/simulation_array.py:616
+│     │  │  │  │  └─ 5.088 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     ├─ 4.961 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │     │  ├─ 4.865 _eval_arrayop_scalar  earthsci_ast/numpy_interpreter.py:2146
+│     │  │  │  │     │  │  ├─ 4.838 _reduce_over_gated  earthsci_ast/numpy_interpreter.py:2194
+│     │  │  │  │     │  │  │  ├─ 3.233 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  ├─ 1.140 _join_admits  earthsci_ast/numpy_interpreter.py:2034
+│     │  │  │  │     │  │  │  ├─ 0.396 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  ├─ 0.326 _eval_index  earthsci_ast/numpy_interpreter.py:1076
+│     │  │  │  │     │  │  │  │  │  ├─ 0.151 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.060 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.045 <genexpr>  earthsci_ast/numpy_interpreter.py:1061
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.040 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  └─ 0.005 round  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.028 <genexpr>  earthsci_ast/numpy_interpreter.py:1053
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.021 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  └─ 0.007 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.007 len  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.005 ndim  numpy/_core/fromnumeric.py:3520
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.004 _ndim_dispatcher  numpy/_core/fromnumeric.py:3516
+│     │  │  │  │     │  │  │  │  │  │  └─ 0.002 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  ├─ 0.134 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.071 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.033 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  └─ 0.030 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │     │  │  │  │  │  │     ├─ 0.029 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │     └─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  └─ 0.041 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  ├─ 0.049 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  ├─ 0.038 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.032 _eval_index  earthsci_ast/numpy_interpreter.py:1076
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.020 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.015 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.002 <genexpr>  earthsci_ast/numpy_interpreter.py:1053
+│     │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.001 len  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.001 <genexpr>  earthsci_ast/numpy_interpreter.py:1061
+│     │  │  │  │     │  │  │  │  │  │  │  │  └─ 0.001 _ndim_dispatcher  numpy/_core/fromnumeric.py:3516
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.008 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.003 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  └─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  └─ 0.002 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  ├─ 0.010 _eval_index  earthsci_ast/numpy_interpreter.py:1076
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.008 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.002 <genexpr>  earthsci_ast/numpy_interpreter.py:1061
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.001 _ndim_dispatcher  numpy/_core/fromnumeric.py:3516
+│     │  │  │  │     │  │  │  │  │  │  │  └─ 0.001 <genexpr>  earthsci_ast/numpy_interpreter.py:1053
+│     │  │  │  │     │  │  │  │  │  │  └─ 0.002 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  │     ├─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │     └─ 0.001 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │     │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  ├─ 0.014 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  └─ 0.007 isinstance  <built-in>
+│     │  │  │  │     │  │  │  ├─ 0.055 _filter_admits  earthsci_ast/numpy_interpreter.py:2044
+│     │  │  │  │     │  │  │  │  ├─ 0.053 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  ├─ 0.036 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.033 _eval_index  earthsci_ast/numpy_interpreter.py:1076
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.018 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.007 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.006 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  │  └─ 0.005 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │     │  │  │  │  │  │  │  │     ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │     └─ 0.002 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  ├─ 0.008 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.005 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.002 <genexpr>  earthsci_ast/numpy_interpreter.py:1061
+│     │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  │  │  │  └─ 0.001 round  <built-in>
+│     │  │  │  │     │  │  │  │  │  │  │  │  └─ 0.001 _ndim_dispatcher  numpy/_core/fromnumeric.py:3516
+│     │  │  │  │     │  │  │  │  │  │  │  └─ 0.007 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  │  ├─ 0.002 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │     │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  ├─ 0.016 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  │  └─ 0.001 len  <built-in>
+│     │  │  │  │     │  │  │  │  ├─ 0.001 ndarray.reshape  <built-in>
+│     │  │  │  │     │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  ├─ 0.013 _reduce_step  earthsci_ast/numpy_interpreter.py:1778
+│     │  │  │  │     │  │  │  │  ├─ 0.008 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  └─ 0.005 min  <built-in>
+│     │  │  │  │     │  │  │  └─ 0.001 dict.update  <built-in>
+│     │  │  │  │     │  │  ├─ 0.012 _resolve_join  earthsci_ast/numpy_interpreter.py:1925
+│     │  │  │  │     │  │  │  ├─ 0.007 _encode_join_keys  earthsci_ast/numpy_interpreter.py:1895
+│     │  │  │  │     │  │  │  │  ├─ 0.003 codes  earthsci_ast/numpy_interpreter.py:1917
+│     │  │  │  │     │  │  │  │  │  └─ 0.003 searchsorted  numpy/_core/fromnumeric.py:1459
+│     │  │  │  │     │  │  │  │  │     └─ 0.003 _wrapfunc  numpy/_core/fromnumeric.py:48
+│     │  │  │  │     │  │  │  │  │        └─ 0.003 ndarray.searchsorted  <built-in>
+│     │  │  │  │     │  │  │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  ├─ 0.001 sorted  <built-in>
+│     │  │  │  │     │  │  │  │  ├─ 0.001 <genexpr>  earthsci_ast/numpy_interpreter.py:1906
+│     │  │  │  │     │  │  │  │  └─ 0.001 <genexpr>  earthsci_ast/numpy_interpreter.py:1905
+│     │  │  │  │     │  │  │  ├─ 0.004 _resolve_join_key_column  earthsci_ast/numpy_interpreter.py:1975
+│     │  │  │  │     │  │  │  │  ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  └─ 0.002 round  <built-in>
+│     │  │  │  │     │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  ├─ 0.011 _iter_output_cells  earthsci_ast/numpy_interpreter.py:1687
+│     │  │  │  │     │  │  │  ├─ 0.007 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  └─ 0.004 ndindex.__next__  numpy/lib/_index_tricks_impl.py:697
+│     │  │  │  │     │  │  └─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  ├─ 0.061 _eval_arrayop_batched_leaf  earthsci_ast/numpy_interpreter.py:1426
+│     │  │  │  │     │  │  ├─ 0.035 intersect_polygon_area_batch  earthsci_ast/geometry.py:410
+│     │  │  │  │     │  │  │  └─ 0.035 _area_batch_planar  earthsci_ast/geometry.py:376
+│     │  │  │  │     │  │  │     ├─ 0.015 _sh_clip_step  earthsci_ast/geometry.py:300
+│     │  │  │  │     │  │  │     │  ├─ 0.007 [self]  earthsci_ast/geometry.py
+│     │  │  │  │     │  │  │     │  ├─ 0.005 argsort  numpy/_core/fromnumeric.py:1115
+│     │  │  │  │     │  │  │     │  │  └─ 0.005 _wrapfunc  numpy/_core/fromnumeric.py:48
+│     │  │  │  │     │  │  │     │  │     └─ 0.005 ndarray.argsort  <built-in>
+│     │  │  │  │     │  │  │     │  ├─ 0.002 take_along_axis  numpy/lib/_shape_base_impl.py:60
+│     │  │  │  │     │  │  │     │  │  ├─ 0.001 [self]  numpy/lib/_shape_base_impl.py
+│     │  │  │  │     │  │  │     │  │  └─ 0.001 _make_along_axis_idx  numpy/lib/_shape_base_impl.py:33
+│     │  │  │  │     │  │  │     │  └─ 0.001 _sum  numpy/_core/_methods.py:47
+│     │  │  │  │     │  │  │     │     └─ 0.001 ufunc.reduce  <built-in>
+│     │  │  │  │     │  │  │     ├─ 0.010 _amax  numpy/_core/_methods.py:39
+│     │  │  │  │     │  │  │     │  └─ 0.010 ufunc.reduce  <built-in>
+│     │  │  │  │     │  │  │     └─ 0.010 _amin  numpy/_core/_methods.py:43
+│     │  │  │  │     │  │  │        └─ 0.010 ufunc.reduce  <built-in>
+│     │  │  │  │     │  │  ├─ 0.009 nonzero  numpy/_core/fromnumeric.py:2031
+│     │  │  │  │     │  │  │  └─ 0.009 _wrapfunc  numpy/_core/fromnumeric.py:48
+│     │  │  │  │     │  │  │     └─ 0.009 ndarray.nonzero  <built-in>
+│     │  │  │  │     │  │  ├─ 0.007 _resolve_join  earthsci_ast/numpy_interpreter.py:1925
+│     │  │  │  │     │  │  │  ├─ 0.004 _encode_join_keys  earthsci_ast/numpy_interpreter.py:1895
+│     │  │  │  │     │  │  │  │  ├─ 0.002 codes  earthsci_ast/numpy_interpreter.py:1917
+│     │  │  │  │     │  │  │  │  │  └─ 0.002 searchsorted  numpy/_core/fromnumeric.py:1459
+│     │  │  │  │     │  │  │  │  │     └─ 0.002 _wrapfunc  numpy/_core/fromnumeric.py:48
+│     │  │  │  │     │  │  │  │  │        └─ 0.002 ndarray.searchsorted  <built-in>
+│     │  │  │  │     │  │  │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  └─ 0.001 sorted  <built-in>
+│     │  │  │  │     │  │  │  ├─ 0.002 _resolve_join_key_column  earthsci_ast/numpy_interpreter.py:1975
+│     │  │  │  │     │  │  │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  │  └─ 0.001 round  <built-in>
+│     │  │  │  │     │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  ├─ 0.005 _join_admits_mask  earthsci_ast/numpy_interpreter.py:1395
+│     │  │  │  │     │  │  │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  │  └─ 0.001 array  <built-in>
+│     │  │  │  │     │  │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  └─ 0.001 full  numpy/_core/numeric.py:323
+│     │  │  │  │     │  ├─ 0.019 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  │     │  │  ├─ 0.014 [self]  earthsci_ast/flatten.py
+│     │  │  │  │     │  │  └─ 0.005 list.append  <built-in>
+│     │  │  │  │     │  ├─ 0.007 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │     │  │  ├─ 0.004 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │     │  │  │  └─ 0.004 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │  │     │  │  │     └─ 0.004 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │     │  │  │        └─ 0.004 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │  │     │  │  │           └─ 0.004 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │     │  │  │              └─ 0.004 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │  │     │  │  │                 └─ 0.004 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │     │  │  │                    └─ 0.004 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │  │     │  │  │                       └─ 0.004 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │     │  │  ├─ 0.001 _GeneratorContextManager.__enter__  contextlib.py:136
+│     │  │  │  │     │  │  │  └─ 0.001 _bound_index_box  earthsci_ast/numpy_interpreter.py:1257
+│     │  │  │  │     │  │  │     └─ 0.001 asarray  <built-in>
+│     │  │  │  │     │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  └─ 0.001 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │  │     │  │     └─ 0.001 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │  │     │  │        └─ 0.001 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │     │  │           └─ 0.001 f_mul  earthsci_ast/numpy_interpreter.py:808
+│     │  │  │  │     │  ├─ 0.006 _eval_arrayop_reduce_vectorized  earthsci_ast/numpy_interpreter.py:2068
+│     │  │  │  │     │  │  ├─ 0.003 <lambda>  earthsci_ast/numpy_interpreter.py:822
+│     │  │  │  │     │  │  │  └─ 0.003 f_mul  earthsci_ast/numpy_interpreter.py:808
+│     │  │  │  │     │  │  │     ├─ 0.002 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │  │     │  │  │     │  └─ 0.002 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │     │  │  │     └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  │  ├─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:773
+│     │  │  │  │     │  │  │  └─ 0.001 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │  │     │  │  │     └─ 0.001 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │     │  │  ├─ 0.001 ufunc.reduce  <built-in>
+│     │  │  │  │     │  │  └─ 0.001 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │     │  └─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     ├─ 0.124 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     │  ├─ 0.123 _eval_fn_lifted  earthsci_ast/numpy_interpreter.py:454
+│     │  │  │  │     │  │  ├─ 0.112 evaluate_closed_function  earthsci_ast/registered_functions.py:425
+│     │  │  │  │     │  │  │  ├─ 0.103 _interp_linear  earthsci_ast/registered_functions.py:315
+│     │  │  │  │     │  │  │  │  ├─ 0.076 _validate_interp_axis  earthsci_ast/registered_functions.py:277
+│     │  │  │  │     │  │  │  │  │  ├─ 0.055 [self]  earthsci_ast/registered_functions.py
+│     │  │  │  │     │  │  │  │  │  ├─ 0.013 list.append  <built-in>
+│     │  │  │  │     │  │  │  │  │  ├─ 0.007 isnan  <built-in>
+│     │  │  │  │     │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  ├─ 0.025 [self]  earthsci_ast/registered_functions.py
+│     │  │  │  │     │  │  │  │  ├─ 0.001 isinstance  <built-in>
+│     │  │  │  │     │  │  │  │  └─ 0.001 isnan  <built-in>
+│     │  │  │  │     │  │  │  └─ 0.009 [self]  earthsci_ast/registered_functions.py
+│     │  │  │  │     │  │  └─ 0.011 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │     └─ 0.001 _eval_makearray  earthsci_ast/numpy_interpreter.py:2232
+│     │  │  │  │        └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │           └─ 0.001 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │              └─ 0.001 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │                 └─ 0.001 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │                    └─ 0.001 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │  ├─ 0.437 _materialize_join_key_buffers  earthsci_ast/simulation_array.py:950
+│     │  │  │  │  ├─ 0.415 _materialize_observeds  earthsci_ast/simulation_array.py:616
+│     │  │  │  │  │  └─ 0.415 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │  │     └─ 0.415 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │  │        ├─ 0.406 _eval_arrayop_scalar  earthsci_ast/numpy_interpreter.py:2146
+│     │  │  │  │  │        │  ├─ 0.398 _reduce_over_gated  earthsci_ast/numpy_interpreter.py:2194
+│     │  │  │  │  │        │  │  ├─ 0.355 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │  │        │  │  │  ├─ 0.335 _eval_index  earthsci_ast/numpy_interpreter.py:1076
+│     │  │  │  │  │        │  │  │  │  ├─ 0.171 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.069 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.045 <genexpr>  earthsci_ast/numpy_interpreter.py:1053
+│     │  │  │  │  │        │  │  │  │  │  │  ├─ 0.029 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  │  │  │  └─ 0.016 isinstance  <built-in>
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.043 <genexpr>  earthsci_ast/numpy_interpreter.py:1061
+│     │  │  │  │  │        │  │  │  │  │  │  ├─ 0.034 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  │  │  │  └─ 0.009 round  <built-in>
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.005 len  <built-in>
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.004 ndim  numpy/_core/fromnumeric.py:3520
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.003 isinstance  <built-in>
+│     │  │  │  │  │        │  │  │  │  │  └─ 0.002 _ndim_dispatcher  numpy/_core/fromnumeric.py:3516
+│     │  │  │  │  │        │  │  │  │  ├─ 0.128 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.069 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  │  │  ├─ 0.035 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │  │        │  │  │  │  │  │  ├─ 0.029 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  │  │  │  └─ 0.006 isinstance  <built-in>
+│     │  │  │  │  │        │  │  │  │  │  └─ 0.024 isinstance  <built-in>
+│     │  │  │  │  │        │  │  │  │  └─ 0.035 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  ├─ 0.017 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  │  └─ 0.003 isinstance  <built-in>
+│     │  │  │  │  │        │  │  ├─ 0.036 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │  └─ 0.007 _reduce_step  earthsci_ast/numpy_interpreter.py:1778
+│     │  │  │  │  │        │  │     ├─ 0.006 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        │  │     └─ 0.001 min  <built-in>
+│     │  │  │  │  │        │  ├─ 0.004 _iter_output_cells  earthsci_ast/numpy_interpreter.py:1687
+│     │  │  │  │  │        │  └─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │        ├─ 0.006 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  │  │        │  ├─ 0.005 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │        │  └─ 0.001 list.append  <built-in>
+│     │  │  │  │  │        ├─ 0.002 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │  │        │  ├─ 0.001 _GeneratorContextManager.__enter__  contextlib.py:136
+│     │  │  │  │  │        │  │  └─ 0.001 _bound_index_box  earthsci_ast/numpy_interpreter.py:1257
+│     │  │  │  │  │        │  │     └─ 0.001 _bind_broadcast_range  earthsci_ast/numpy_interpreter.py:1247
+│     │  │  │  │  │        │  │        └─ 0.001 ndarray.reshape  <built-in>
+│     │  │  │  │  │        │  └─ 0.001 _GeneratorContextManager.__exit__  contextlib.py:145
+│     │  │  │  │  │        └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  └─ 0.022 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │     └─ 0.022 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │        ├─ 0.021 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │        │  └─ 0.021 <lambda>  earthsci_ast/numpy_interpreter.py:700
+│     │  │  │  │        │     └─ 0.021 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        └─ 0.021 _eval_skolem  earthsci_ast/numpy_interpreter.py:904
+│     │  │  │  │        │           ├─ 0.014 _skolem_code  earthsci_ast/numpy_interpreter.py:891
+│     │  │  │  │        │           │  ├─ 0.006 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │           │  ├─ 0.003 blake2b.digest  <built-in>
+│     │  │  │  │        │           │  ├─ 0.003 repr  <built-in>
+│     │  │  │  │        │           │  ├─ 0.001 int.from_bytes  <built-in>
+│     │  │  │  │        │           │  └─ 0.001 str.encode  <built-in>
+│     │  │  │  │        │           ├─ 0.005 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │           ├─ 0.001 _skolem_atom  earthsci_ast/numpy_interpreter.py:885
+│     │  │  │  │        │           └─ 0.001 list.append  <built-in>
+│     │  │  │  │        └─ 0.001 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  ├─ 0.393 infer_variable_shapes  earthsci_ast/flatten.py:1662
+│     │  │  │  │  ├─ 0.383 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  ├─ 0.382 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  ├─ 0.377 rec  earthsci_ast/flatten.py:1639
+│     │  │  │  │  │  │  │  └─ 0.377 rec  earthsci_ast/flatten.py:1639
+│     │  │  │  │  │  │  │     └─ 0.377 rec  earthsci_ast/flatten.py:1639
+│     │  │  │  │  │  │  │        ├─ 0.368 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  ├─ 0.360 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  ├─ 0.348 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  ├─ 0.322 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  │  ├─ 0.272 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.234 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.195 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.082 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.034 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.022 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  ├─ 0.014 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  └─ 0.008 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.014 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  ├─ 0.006 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  │  └─ 0.002 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  ├─ 0.006 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  └─ 0.002 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.009 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  ├─ 0.005 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  └─ 0.004 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  └─ 0.003 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.042 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.026 _eval_index_expr  earthsci_ast/flatten.py:1520
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.012 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.008 _eval_index_expr  earthsci_ast/flatten.py:1520
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  ├─ 0.006 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  │  └─ 0.002 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  └─ 0.006 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.024 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  ├─ 0.015 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  │  └─ 0.009 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.008 list.append  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.007 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.004 dict.setdefault  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  └─ 0.002 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │     ├─ 0.001 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │     └─ 0.001 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.021 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.012 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.009 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  │  └─ 0.003 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  └─ 0.006 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │  │  │  │     ├─ 0.004 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │     └─ 0.002 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.015 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.010 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.009 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.009 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.007 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  │  │  │  └─ 0.002 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  └─ 0.004 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  ├─ 0.025 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  ├─ 0.014 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.009 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  │  │  └─ 0.005 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  │  └─ 0.011 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  │     ├─ 0.007 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  │     └─ 0.004 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  ├─ 0.012 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  │  ├─ 0.010 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  │  ├─ 0.006 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  │  └─ 0.004 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  │  └─ 0.004 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        │  │  │     ├─ 0.002 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  │  │     └─ 0.002 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  ├─ 0.006 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  │  ├─ 0.005 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  │  ├─ 0.003 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  │  └─ 0.002 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │  │  │  │        │  ├─ 0.004 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  │  ├─ 0.003 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  │  └─ 0.001 getattr  <built-in>
+│     │  │  │  │  │  │  │        │  ├─ 0.002 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │        │  └─ 0.002 _is_number  earthsci_ast/flatten.py:279
+│     │  │  │  │  │  │  │        ├─ 0.007 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │        │  ├─ 0.005 [self]  earthsci_ast/expr_walk.py
+│     │  │  │  │  │  │  │        │  └─ 0.002 getattr  <built-in>
+│     │  │  │  │  │  │  │        └─ 0.002 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  ├─ 0.003 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │  ├─ 0.002 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │  │  └─ 0.002 _collect_index_uses  earthsci_ast/flatten.py:1573
+│     │  │  │  │  │  │  │  │     ├─ 0.001 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  │  │  │     │  └─ 0.001 getattr  <built-in>
+│     │  │  │  │  │  │  │  │     └─ 0.001 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  ├─ 0.001 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  │  │  │  └─ 0.001 iter_children  earthsci_ast/expr_walk.py:34
+│     │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  ├─ 0.007 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  └─ 0.003 len  <built-in>
+│     │  │  │  ├─ 0.177 _fold_field_ics  earthsci_ast/simulation_array.py:830
+│     │  │  │  │  ├─ 0.172 _resolve_field_ic  earthsci_ast/simulation_array.py:735
+│     │  │  │  │  │  ├─ 0.161 _eval_buildtime_field  earthsci_ast/simulation_array.py:801
+│     │  │  │  │  │  │  ├─ 0.146 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │  │  │  │  ├─ 0.145 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │  │  │  │  │  ├─ 0.059 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │  │  │  │  │  │  ├─ 0.037 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │  │  │  │  │  │  │  ├─ 0.034 <lambda>  earthsci_ast/numpy_interpreter.py:765
+│     │  │  │  │  │  │  │  │  │  │  │  ├─ 0.032 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.027 <lambda>  earthsci_ast/numpy_interpreter.py:829
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.025 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.017 f_mul  earthsci_ast/numpy_interpreter.py:808
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.013 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.010 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.003 <lambda>  earthsci_ast/numpy_interpreter.py:721
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │     ├─ 0.002 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │     └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.003 <lambda>  earthsci_ast/numpy_interpreter.py:822
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.008 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.005 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  └─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  └─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  ├─ 0.015 _GeneratorContextManager.__enter__  contextlib.py:136
+│     │  │  │  │  │  │  │  │  │  │  ├─ 0.013 _bound_index_box  earthsci_ast/numpy_interpreter.py:1257
+│     │  │  │  │  │  │  │  │  │  │  │  ├─ 0.006 _bind_broadcast_range  earthsci_ast/numpy_interpreter.py:1247
+│     │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.001 asarray  <built-in>
+│     │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 ndarray.reshape  <built-in>
+│     │  │  │  │  │  │  │  │  │  │  │  ├─ 0.005 asarray  <built-in>
+│     │  │  │  │  │  │  │  │  │  │  │  └─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  │  └─ 0.002 [self]  contextlib.py
+│     │  │  │  │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  ├─ 0.002 _GeneratorContextManager.__exit__  contextlib.py:145
+│     │  │  │  │  │  │  │  │  │  └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │  │  │  │  │  │  ├─ 0.039 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  │  │  │  │  │  │  ├─ 0.025 [self]  earthsci_ast/flatten.py
+│     │  │  │  │  │  │  │  │  │  ├─ 0.012 list.append  <built-in>
+│     │  │  │  │  │  │  │  │  │  └─ 0.002 len  <built-in>
+│     │  │  │  │  │  │  │  │  ├─ 0.021 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  ├─ 0.009 _resolve_range_spec  earthsci_ast/numpy_interpreter.py:350
+│     │  │  │  │  │  │  │  │  │  ├─ 0.007 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  └─ 0.002 dict.get  <built-in>
+│     │  │  │  │  │  │  │  │  ├─ 0.005 _eval_arrayop_vectorized  earthsci_ast/numpy_interpreter.py:1130
+│     │  │  │  │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  └─ 0.002 _decompose_body_as_scaled_product  earthsci_ast/numpy_interpreter.py:1084
+│     │  │  │  │  │  │  │  │  ├─ 0.004 <genexpr>  earthsci_ast/numpy_interpreter.py:1549
+│     │  │  │  │  │  │  │  │  ├─ 0.003 isinstance  <built-in>
+│     │  │  │  │  │  │  │  │  ├─ 0.002 ModuleSpec.parent  <frozen importlib._bootstrap>:648
+│     │  │  │  │  │  │  │  │  │  └─ 0.002 str.rpartition  <built-in>
+│     │  │  │  │  │  │  │  │  ├─ 0.002 _eval_arrayop_batched_leaf  earthsci_ast/numpy_interpreter.py:1426
+│     │  │  │  │  │  │  │  │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │  │  │  │  │  └─ 0.001 getattr  <built-in>
+│     │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │  │  │  ├─ 0.008 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │  │  │  ├─ 0.005 EvalContext.__init__  <string>:2
+│     │  │  │  │  │  │  └─ 0.002 ModuleSpec.parent  <frozen importlib._bootstrap>:648
+│     │  │  │  │  │  │     └─ 0.002 str.rpartition  <built-in>
+│     │  │  │  │  │  └─ 0.011 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │  ├─ 0.003 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │  ├─ 0.001 _linear_pos  earthsci_ast/simulation_array.py:43
+│     │  │  │  │  └─ 0.001 ndindex.__next__  numpy/lib/_index_tricks_impl.py:697
+│     │  │  │  ├─ 0.003 _time_varying_observeds  earthsci_ast/simulation_array.py:594
+│     │  │  │  │  └─ 0.003 _expr_referenced_names  earthsci_ast/simulation_array.py:514
+│     │  │  │  │     ├─ 0.002 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │     └─ 0.001 list.pop  <built-in>
+│     │  │  │  ├─ 0.003 _element_names  earthsci_ast/simulation_array.py:80
+│     │  │  │  │  ├─ 0.001 <genexpr>  earthsci_ast/simulation_array.py:93
+│     │  │  │  │  ├─ 0.001 ndindex.__next__  numpy/lib/_index_tricks_impl.py:697
+│     │  │  │  │  └─ 0.001 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  └─ 0.003 _order_observed_equations  earthsci_ast/simulation_array.py:541
+│     │  │  │     └─ 0.003 _expr_referenced_names  earthsci_ast/simulation_array.py:514
+│     │  │  │        ├─ 0.002 [self]  earthsci_ast/simulation_array.py
+│     │  │  │        └─ 0.001 isinstance  <built-in>
+│     │  │  ├─ 0.233 solve_ivp  scipy/integrate/_ivp/ivp.py:160
+│     │  │  │  ├─ 0.223 RK45.step  scipy/integrate/_ivp/base.py:179
+│     │  │  │  │  └─ 0.223 RK45._step_impl  scipy/integrate/_ivp/rk.py:111
+│     │  │  │  │     └─ 0.223 rk_step  scipy/integrate/_ivp/rk.py:14
+│     │  │  │  │        ├─ 0.222 fun  scipy/integrate/_ivp/base.py:156
+│     │  │  │  │        │  └─ 0.222 fun_wrapped  scipy/integrate/_ivp/base.py:23
+│     │  │  │  │        │     └─ 0.222 rhs_function  earthsci_ast/simulation_array.py:1278
+│     │  │  │  │        │        ├─ 0.217 _materialize_observeds  earthsci_ast/simulation_array.py:616
+│     │  │  │  │        │        │  ├─ 0.216 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  ├─ 0.143 _eval_makearray  earthsci_ast/numpy_interpreter.py:2232
+│     │  │  │  │        │        │  │  │  ├─ 0.133 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  │  ├─ 0.132 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.107 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.084 <lambda>  earthsci_ast/numpy_interpreter.py:765
+│     │  │  │  │        │        │  │  │  │  │  │  │  └─ 0.084 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │  │        │        │  │  │  │  │  │  │     └─ 0.084 <lambda>  earthsci_ast/numpy_interpreter.py:829
+│     │  │  │  │        │        │  │  │  │  │  │  │        ├─ 0.080 f_minmax  earthsci_ast/numpy_interpreter.py:863
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  ├─ 0.072 <lambda>  earthsci_ast/numpy_interpreter.py:822
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  ├─ 0.067 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  ├─ 0.060 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  ├─ 0.039 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.024 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.004 asarray  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.004 <genexpr>  earthsci_ast/numpy_interpreter.py:1053
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.002 ndarray.astype  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.002 float64.astype  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.002 <genexpr>  earthsci_ast/numpy_interpreter.py:1061
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  └─ 0.002 round  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  ├─ 0.011 <lambda>  earthsci_ast/numpy_interpreter.py:721
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.009 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.005 _view_state_array  earthsci_ast/numpy_interpreter.py:191
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  │  ├─ 0.004 ndarray.reshape  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  └─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  ├─ 0.006 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  ├─ 0.003 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │  └─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:721
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  │     └─ 0.001 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  │  └─ 0.001 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  │  └─ 0.007 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │  └─ 0.002 <lambda>  earthsci_ast/numpy_interpreter.py:721
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  │     └─ 0.002 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  ├─ 0.004 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  ├─ 0.002 reduce  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  ├─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:727
+│     │  │  │  │        │        │  │  │  │  │  │  │        │  └─ 0.001 len  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │        ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │        └─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:727
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.013 <lambda>  earthsci_ast/numpy_interpreter.py:822
+│     │  │  │  │        │        │  │  │  │  │  │  │  ├─ 0.012 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  ├─ 0.011 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  │  ├─ 0.009 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  │  │  ├─ 0.008 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  │  │  └─ 0.001 float64.astype  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  │  ├─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:721
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │  └─ 0.001 f_mul  earthsci_ast/numpy_interpreter.py:808
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.005 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.003 _GeneratorContextManager.__enter__  contextlib.py:136
+│     │  │  │  │        │        │  │  │  │  │  │  │  ├─ 0.002 _bound_index_box  earthsci_ast/numpy_interpreter.py:1257
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  ├─ 0.001 _bind_broadcast_range  earthsci_ast/numpy_interpreter.py:1247
+│     │  │  │  │        │        │  │  │  │  │  │  │  │  └─ 0.001 len  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  │  └─ 0.001 next  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.001 broadcast_to  numpy/lib/_stride_tricks_impl.py:474
+│     │  │  │  │        │        │  │  │  │  │  │  │  └─ 0.001 _broadcast_to  numpy/lib/_stride_tricks_impl.py:447
+│     │  │  │  │        │        │  │  │  │  │  │  └─ 0.001 helper  contextlib.py:303
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.009 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.009 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.005 list.append  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  │  └─ 0.004 [self]  earthsci_ast/flatten.py
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.003 _eval_arrayop_vectorized  earthsci_ast/numpy_interpreter.py:1130
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.002 _decompose_body_as_scaled_product  earthsci_ast/numpy_interpreter.py:1084
+│     │  │  │  │        │        │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.002 _expand_reduce_ranges  earthsci_ast/numpy_interpreter.py:1276
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.001 list.append  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  └─ 0.001 getattr  <built-in>
+│     │  │  │  │        │        │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  ├─ 0.007 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  └─ 0.003 <genexpr>  earthsci_ast/numpy_interpreter.py:2269
+│     │  │  │  │        │        │  │  ├─ 0.046 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  ├─ 0.023 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  │  ├─ 0.014 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.009 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.006 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  │  │  │  │  ├─ 0.005 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  │  └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  │  │  │  │  │     └─ 0.001 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  └─ 0.005 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  ├─ 0.006 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  ├─ 0.002 isinstance  <built-in>
+│     │  │  │  │        │        │  │  │  │  └─ 0.001 reduce  <built-in>
+│     │  │  │  │        │        │  │  │  ├─ 0.018 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  ├─ 0.002 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │  │        │        │  │  │  │  ├─ 0.001 _view_state_array  earthsci_ast/numpy_interpreter.py:191
+│     │  │  │  │        │        │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  ├─ 0.002 isinstance  <built-in>
+│     │  │  │  │        │        │  │  │  └─ 0.001 len  <built-in>
+│     │  │  │  │        │        │  │  ├─ 0.023 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │  │        │        │  │  │  ├─ 0.012 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │  │        │        │  │  │  │  ├─ 0.010 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │  │        │        │  │  │  │  │  ├─ 0.009 f_mul  earthsci_ast/numpy_interpreter.py:808
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.006 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │  │        │        │  │  │  │  │  │  │  └─ 0.006 _gather_index  earthsci_ast/numpy_interpreter.py:1035
+│     │  │  │  │        │        │  │  │  │  │  │  ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  │  │  └─ 0.001 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │  │        │        │  │  │  │  │  │     └─ 0.001 len  <built-in>
+│     │  │  │  │        │        │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  │  └─ 0.002 _GeneratorContextManager.__enter__  contextlib.py:136
+│     │  │  │  │        │        │  │  │  │     └─ 0.002 _bound_index_box  earthsci_ast/numpy_interpreter.py:1257
+│     │  │  │  │        │        │  │  │  │        ├─ 0.001 asarray  <built-in>
+│     │  │  │  │        │        │  │  │  │        └─ 0.001 _bind_broadcast_range  earthsci_ast/numpy_interpreter.py:1247
+│     │  │  │  │        │        │  │  │  ├─ 0.008 _expand_range  earthsci_ast/flatten.py:451
+│     │  │  │  │        │        │  │  │  │  ├─ 0.005 list.append  <built-in>
+│     │  │  │  │        │        │  │  │  │  └─ 0.003 [self]  earthsci_ast/flatten.py
+│     │  │  │  │        │        │  │  │  ├─ 0.002 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  │  └─ 0.001 _eval_arrayop_vectorized  earthsci_ast/numpy_interpreter.py:1130
+│     │  │  │  │        │        │  │  │     └─ 0.001 _decompose_body_as_scaled_product  earthsci_ast/numpy_interpreter.py:1084
+│     │  │  │  │        │        │  │  │        └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  │  ├─ 0.003 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  └─ 0.001 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │        │        ├─ 0.003 _apply_equation_to_dy  earthsci_ast/simulation_array.py:334
+│     │  │  │  │        │        │  ├─ 0.002 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │  ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │  │        │        │  │  └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │     └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │  │        │        │  │        └─ 0.001 isinstance  <built-in>
+│     │  │  │  │        │        │  └─ 0.001 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │        │        └─ 0.002 [self]  earthsci_ast/simulation_array.py
+│     │  │  │  │        └─ 0.001 [self]  scipy/integrate/_ivp/rk.py
+│     │  │  │  └─ 0.010 RK45.__init__  scipy/integrate/_ivp/rk.py:85
+│     │  │  │     ├─ 0.005 fun  scipy/integrate/_ivp/base.py:156
+│     │  │  │     │  └─ 0.005 fun_wrapped  scipy/integrate/_ivp/base.py:23
+│     │  │  │     │     └─ 0.005 rhs_function  earthsci_ast/simulation_array.py:1278
+│     │  │  │     │        └─ 0.005 _materialize_observeds  earthsci_ast/simulation_array.py:616
+│     │  │  │     │           ├─ 0.004 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │           │  ├─ 0.003 _eval_makearray  earthsci_ast/numpy_interpreter.py:2232
+│     │  │  │     │           │  │  └─ 0.003 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │           │  │     └─ 0.003 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │     │           │  │        ├─ 0.002 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │     │           │  │        │  └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │     └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │        └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │           └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │              └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                 └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │                    └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                       └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │                          └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                             └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │                                └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                                   └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │                                      └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                                         └─ 0.002 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │                                            └─ 0.002 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                                               ├─ 0.001 _build_compiled_node  earthsci_ast/numpy_interpreter.py:738
+│     │  │  │     │           │  │        │                                               │  └─ 0.001 _compile_expr  earthsci_ast/numpy_interpreter.py:703
+│     │  │  │     │           │  │        │                                               │     └─ 0.001 isinstance  <built-in>
+│     │  │  │     │           │  │        │                                               └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │     │           │  │        └─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │     │           │  └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │           └─ 0.001 [self]  earthsci_ast/simulation_array.py
+│     │  │  │     ├─ 0.004 select_initial_step  scipy/integrate/_ivp/common.py:68
+│     │  │  │     │  └─ 0.004 fun  scipy/integrate/_ivp/base.py:156
+│     │  │  │     │     └─ 0.004 fun_wrapped  scipy/integrate/_ivp/base.py:23
+│     │  │  │     │        └─ 0.004 rhs_function  earthsci_ast/simulation_array.py:1278
+│     │  │  │     │           └─ 0.004 _materialize_observeds  earthsci_ast/simulation_array.py:616
+│     │  │  │     │              └─ 0.004 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │                 ├─ 0.002 _eval_makearray  earthsci_ast/numpy_interpreter.py:2232
+│     │  │  │     │                 │  └─ 0.002 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │                 │     └─ 0.002 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │     │                 │        └─ 0.002 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │     │                 │           └─ 0.002 <lambda>  earthsci_ast/numpy_interpreter.py:765
+│     │  │  │     │                 │              └─ 0.002 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │     │                 │                 └─ 0.002 <lambda>  earthsci_ast/numpy_interpreter.py:829
+│     │  │  │     │                 │                    ├─ 0.001 [self]  earthsci_ast/numpy_interpreter.py
+│     │  │  │     │                 │                    └─ 0.001 f_minmax  earthsci_ast/numpy_interpreter.py:863
+│     │  │  │     │                 │                       └─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:822
+│     │  │  │     │                 │                          └─ 0.001 f_sub  earthsci_ast/numpy_interpreter.py:792
+│     │  │  │     │                 │                             └─ 0.001 f_index  earthsci_ast/numpy_interpreter.py:755
+│     │  │  │     │                 │                                └─ 0.001 <lambda>  earthsci_ast/numpy_interpreter.py:721
+│     │  │  │     │                 │                                   └─ 0.001 _resolve_symbol  earthsci_ast/numpy_interpreter.py:201
+│     │  │  │     │                 │                                      └─ 0.001 _view_state_array  earthsci_ast/numpy_interpreter.py:191
+│     │  │  │     │                 │                                         └─ 0.001 ndarray.reshape  <built-in>
+│     │  │  │     │                 ├─ 0.001 _eval_arrayop  earthsci_ast/numpy_interpreter.py:1506
+│     │  │  │     │                 │  └─ 0.001 _materialize_map  earthsci_ast/numpy_interpreter.py:1328
+│     │  │  │     │                 │     └─ 0.001 f_add  earthsci_ast/numpy_interpreter.py:780
+│     │  │  │     │                 │        └─ 0.001 f_mul  earthsci_ast/numpy_interpreter.py:808
+│     │  │  │     │                 └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │                    └─ 0.001 eval_expr  earthsci_ast/numpy_interpreter.py:486
+│     │  │  │     │                       └─ 0.001 isinstance  <built-in>
+│     │  │  │     └─ 0.001 RK45.__init__  scipy/integrate/_ivp/base.py:135
+│     │  │  │        └─ 0.001 check_arguments  scipy/integrate/_ivp/base.py:5
+│     │  │  ├─ 0.088 _densify_solution  earthsci_ast/simulation_array.py:56
+│     │  │  │  ├─ 0.084 OdeSolution.__call__  scipy/integrate/_ivp/common.py:214
+│     │  │  │  │  ├─ 0.032 RkDenseOutput.__call__  scipy/integrate/_ivp/base.py:266
+│     │  │  │  │  │  └─ 0.032 RkDenseOutput._call_impl  scipy/integrate/_ivp/rk.py:723
+│     │  │  │  │  ├─ 0.027 [self]  scipy/integrate/_ivp/common.py
+│     │  │  │  │  └─ 0.025 hstack  numpy/_core/shape_base.py:293
+│     │  │  │  └─ 0.003 unique  numpy/lib/_arraysetops_impl.py:145
+│     │  │  │     └─ 0.003 _unique1d  numpy/lib/_arraysetops_impl.py:350
+│     │  │  │        └─ 0.003 ndarray.sort  <built-in>
+│     │  │  ├─ 0.045 [self]  earthsci_ast/simulation_loaders.py
+│     │  │  ├─ 0.002 _element_names  earthsci_ast/simulation_array.py:80
+│     │  │  │  ├─ 0.001 <genexpr>  earthsci_ast/simulation_array.py:93
+│     │  │  │  └─ 0.001 [self]  earthsci_ast/simulation_array.py
+│     │  │  ├─ 0.002 _refresh_discrete  earthsci_ast/simulation_loaders.py:776
+│     │  │  │  └─ 0.002 _provider_refresh_field  earthsci_ast/simulation_loaders.py:645
+│     │  │  │     └─ 0.002 Provider.refresh  earthsciio/provider.py:245
+│     │  │  │        └─ 0.002 Provider._refresh_bracket  earthsciio/provider.py:377
+│     │  │  │           └─ 0.002 _record_index  earthsciio/provider.py:549
+│     │  │  │              └─ 0.002 _decode_file_times  earthsciio/provider.py:507
+│     │  │  │                 └─ 0.002 decode_cf_datetime  xarray/coding/times.py:535
+│     │  │  │                    └─ 0.002 _decode_datetime_with_pandas  xarray/coding/times.py:472
+│     │  │  │                       └─ 0.002 _unpack_time_unit_and_ref_date  xarray/coding/times.py:313
+│     │  │  │                          ├─ 0.001 _cast_timestamp_to_coarsest_resolution  xarray/coding/times.py:298
+│     │  │  │                          └─ 0.001 _unpack_netcdf_time_units  xarray/coding/times.py:205
+│     │  │  │                             └─ 0.001 _ensure_padded_year  xarray/coding/times.py:171
+│     │  │  │                                └─ 0.001 match  re/__init__.py:164
+│     │  │  │                                   └─ 0.001 Pattern.match  <built-in>
+│     │  │  └─ 0.001 SimulationResult.__init__  <string>:2
+│     │  ├─ 1.040 _provider_sample_field  earthsci_ast/simulation_loaders.py:44
+│     │  │  └─ 1.040 Provider.materialize  earthsciio/provider.py:232
+│     │  │     ├─ 1.039 Provider._read_file  earthsciio/provider.py:358
+│     │  │     │  ├─ 1.036 Provider._fetch  earthsciio/provider.py:350
+│     │  │     │  │  └─ 1.036 Cache.fetch  earthsciio/cache.py:104
+│     │  │     │  │     ├─ 1.034 Cache._download  earthsciio/cache.py:168
+│     │  │     │  │     │  ├─ 1.029 HttpTransport.fetch  earthsciio/backends/http.py:39
+│     │  │     │  │     │  │  ├─ 1.026 get  requests/api.py:74
+│     │  │     │  │     │  │  │  └─ 1.026 request  requests/api.py:24
+│     │  │     │  │     │  │  │     └─ 1.026 Session.request  requests/sessions.py:557
+│     │  │     │  │     │  │  │        ├─ 1.023 Session.send  requests/sessions.py:752
+│     │  │     │  │     │  │  │        │  ├─ 1.021 HTTPAdapter.send  requests/adapters.py:634
+│     │  │     │  │     │  │  │        │  │  ├─ 1.020 HTTPSConnectionPool.urlopen  urllib3/connectionpool.py:592
+│     │  │     │  │     │  │  │        │  │  │  ├─ 1.019 HTTPSConnectionPool._make_request  urllib3/connectionpool.py:377
+│     │  │     │  │     │  │  │        │  │  │  │  ├─ 0.628 HTTPSConnectionPool._validate_conn  urllib3/connectionpool.py:1098
+│     │  │     │  │     │  │  │        │  │  │  │  │  └─ 0.628 HTTPSConnection.connect  urllib3/connection.py:724
+│     │  │     │  │     │  │  │        │  │  │  │  │     ├─ 0.323 _ssl_wrap_socket_and_match_hostname  urllib3/connection.py:901
+│     │  │     │  │     │  │  │        │  │  │  │  │     │  └─ 0.323 ssl_wrap_socket  urllib3/util/ssl_.py:363
+│     │  │     │  │     │  │  │        │  │  │  │  │     │     ├─ 0.303 _ssl_wrap_socket_impl  urllib3/util/ssl_.py:461
+│     │  │     │  │     │  │  │        │  │  │  │  │     │     │  └─ 0.303 SSLContext.wrap_socket  ssl.py:449
+│     │  │     │  │     │  │  │        │  │  │  │  │     │     │     └─ 0.303 SSLSocket._create  ssl.py:990
+│     │  │     │  │     │  │  │        │  │  │  │  │     │     │        └─ 0.303 SSLSocket.do_handshake  ssl.py:1365
+│     │  │     │  │     │  │  │        │  │  │  │  │     │     │           └─ 0.303 _SSLSocket.do_handshake  <built-in>
+│     │  │     │  │     │  │  │        │  │  │  │  │     │     └─ 0.020 SSLContext.load_verify_locations  <built-in>
+│     │  │     │  │     │  │  │        │  │  │  │  │     └─ 0.305 HTTPSConnection._new_conn  urllib3/connection.py:198
+│     │  │     │  │     │  │  │        │  │  │  │  │        └─ 0.305 create_connection  urllib3/util/connection.py:27
+│     │  │     │  │     │  │  │        │  │  │  │  │           ├─ 0.298 socket.connect  <built-in>
+│     │  │     │  │     │  │  │        │  │  │  │  │           └─ 0.007 getaddrinfo  socket.py:966
+│     │  │     │  │     │  │  │        │  │  │  │  │              └─ 0.007 getaddrinfo  <built-in>
+│     │  │     │  │     │  │  │        │  │  │  │  ├─ 0.390 HTTPSConnection.getresponse  urllib3/connection.py:540
+│     │  │     │  │     │  │  │        │  │  │  │  │  ├─ 0.389 HTTPSConnection.getresponse  http/client.py:1406
+│     │  │     │  │     │  │  │        │  │  │  │  │  │  └─ 0.389 HTTPResponse.begin  http/client.py:329
+│     │  │     │  │     │  │  │        │  │  │  │  │  │     ├─ 0.387 HTTPResponse._read_status  http/client.py:296
+│     │  │     │  │     │  │  │        │  │  │  │  │  │     │  └─ 0.387 SocketIO.readinto  socket.py:712
+│     │  │     │  │     │  │  │        │  │  │  │  │  │     │     └─ 0.387 SSLSocket.recv_into  ssl.py:1289
+│     │  │     │  │     │  │  │        │  │  │  │  │  │     │        └─ 0.387 SSLSocket.read  ssl.py:1129
+│     │  │     │  │     │  │  │        │  │  │  │  │  │     │           └─ 0.387 _SSLSocket.read  <built-in>
+│     │  │     │  │     │  │  │        │  │  │  │  │  │     └─ 0.002 parse_headers  http/client.py:250
+│     │  │     │  │     │  │  │        │  │  │  │  │  │        └─ 0.002 _parse_header_lines  http/client.py:236
+│     │  │     │  │     │  │  │        │  │  │  │  │  │           └─ 0.002 Parser.parsestr  email/parser.py:56
+│     │  │     │  │     │  │  │        │  │  │  │  │  │              └─ 0.002 Parser.parse  email/parser.py:41
+│     │  │     │  │     │  │  │        │  │  │  │  │  │                 └─ 0.002 FeedParser.feed  email/feedparser.py:173
+│     │  │     │  │     │  │  │        │  │  │  │  │  │                    └─ 0.002 FeedParser._call_parse  email/feedparser.py:178
+│     │  │     │  │     │  │  │        │  │  │  │  │  │                       └─ 0.002 FeedParser._parsegen  email/feedparser.py:218
+│     │  │     │  │     │  │  │        │  │  │  │  │  │                          └─ 0.002 FeedParser._parse_headers  email/feedparser.py:472
+│     │  │     │  │     │  │  │        │  │  │  │  │  │                             ├─ 0.001 HTTPMessage.set_raw  email/message.py:523
+│     │  │     │  │     │  │  │        │  │  │  │  │  │                             └─ 0.001 [self]  email/feedparser.py
+│     │  │     │  │     │  │  │        │  │  │  │  │  └─ 0.001 [self]  urllib3/connection.py
+│     │  │     │  │     │  │  │        │  │  │  │  └─ 0.001 HTTPSConnection.request  urllib3/connection.py:424
+│     │  │     │  │     │  │  │        │  │  │  └─ 0.001 _encode_target  urllib3/util/url.py:349
+│     │  │     │  │     │  │  │        │  │  │     └─ 0.001 _encode_invalid_chars  urllib3/util/url.py:227
+│     │  │     │  │     │  │  │        │  │  └─ 0.001 HTTPAdapter.build_response  requests/adapters.py:365
+│     │  │     │  │     │  │  │        │  │     └─ 0.001 extract_cookies_to_jar  requests/cookies.py:135
+│     │  │     │  │     │  │  │        │  │        └─ 0.001 RequestsCookieJar.extract_cookies  http/cookiejar.py:1681
+│     │  │     │  │     │  │  │        │  │           └─ 0.001 RequestsCookieJar.make_cookies  http/cookiejar.py:1600
+│     │  │     │  │     │  │  │        │  │              └─ 0.001 RequestsCookieJar._cookies_from_attrs_set  http/cookiejar.py:1579
+│     │  │     │  │     │  │  │        │  │                 └─ 0.001 RequestsCookieJar._cookie_from_cookie_tuple  http/cookiejar.py:1487
+│     │  │     │  │     │  │  │        │  │                    └─ 0.001 Cookie.__init__  http/cookiejar.py:762
+│     │  │     │  │     │  │  │        │  ├─ 0.001 [self]  requests/sessions.py
+│     │  │     │  │     │  │  │        │  └─ 0.001 Session.resolve_redirects  requests/sessions.py:186
+│     │  │     │  │     │  │  │        │     └─ 0.001 urlparse  urllib/parse.py:374
+│     │  │     │  │     │  │  │        │        └─ 0.001 _urlparse  urllib/parse.py:399
+│     │  │     │  │     │  │  │        │           └─ 0.001 _urlsplit  urllib/parse.py:499
+│     │  │     │  │     │  │  │        ├─ 0.002 Session.merge_environment_settings  requests/sessions.py:831
+│     │  │     │  │     │  │  │        │  └─ 0.002 get_environ_proxies  requests/utils.py:873
+│     │  │     │  │     │  │  │        │     ├─ 0.001 should_bypass_proxies  requests/utils.py:810
+│     │  │     │  │     │  │  │        │     │  └─ 0.001 proxy_bypass  urllib/request.py:2051
+│     │  │     │  │     │  │  │        │     │     └─ 0.001 proxy_bypass_macosx_sysconf  urllib/request.py:2037
+│     │  │     │  │     │  │  │        │     │        └─ 0.001 _proxy_bypass_macosx_sysconf  urllib/request.py:1946
+│     │  │     │  │     │  │  │        │     │           └─ 0.001 IPv4Address.__init__  ipaddress.py:1272
+│     │  │     │  │     │  │  │        │     └─ 0.001 getproxies  urllib/request.py:2064
+│     │  │     │  │     │  │  │        │        └─ 0.001 getproxies_environment  urllib/request.py:1874
+│     │  │     │  │     │  │  │        └─ 0.001 Session.prepare_request  requests/sessions.py:511
+│     │  │     │  │     │  │  │           └─ 0.001 PreparedRequest.prepare  requests/models.py:422
+│     │  │     │  │     │  │  │              └─ 0.001 PreparedRequest.prepare_url  requests/models.py:481
+│     │  │     │  │     │  │  │                 └─ 0.001 _encode_params  requests/models.py:151
+│     │  │     │  │     │  │  │                    └─ 0.001 SupportsRead.__instancecheck__  typing.py:2027
+│     │  │     │  │     │  │  │                       └─ 0.001 getattr_static  inspect.py:1725
+│     │  │     │  │     │  │  │                          └─ 0.001 _check_class  inspect.py:1686
+│     │  │     │  │     │  │  └─ 0.004 Response.close  requests/models.py:1169
+│     │  │     │  │     │  │     └─ 0.004 HTTPResponse.close  urllib3/response.py:1285
+│     │  │     │  │     │  │        └─ 0.004 HTTPSConnection.close  urllib3/connection.py:375
+│     │  │     │  │     │  ├─ 0.003 Cache._commit  earthsciio/cache.py:206
+│     │  │     │  │     │  │  ├─ 0.002 LocalStore.put_meta  earthsciio/backends/local.py:161
+│     │  │     │  │     │  │  │  └─ 0.002 PosixPath.write_text  pathlib/__init__.py:799
+│     │  │     │  │     │  │  │     ├─ 0.001 PosixPath.open  pathlib/__init__.py:763
+│     │  │     │  │     │  │  │     └─ 0.001 TextIOWrapper.__exit__  <built-in>
+│     │  │     │  │     │  │  └─ 0.001 LocalStore.get_meta  earthsciio/backends/local.py:155
+│     │  │     │  │     │  │     └─ 0.001 PosixPath.read_text  pathlib/__init__.py:780
+│     │  │     │  │     │  └─ 0.001 LocalStore.get_meta  earthsciio/backends/local.py:155
+│     │  │     │  │     │     └─ 0.001 PosixPath.read_text  pathlib/__init__.py:780
+│     │  │     │  │     │        └─ 0.001 PosixPath.open  pathlib/__init__.py:763
+│     │  │     │  │     └─ 0.002 Cache._try_hit  earthsciio/cache.py:154
+│     │  │     │  │        ├─ 0.001 LocalStore.get_meta  earthsciio/backends/local.py:155
+│     │  │     │  │        └─ 0.001 LocalStore.get_blob  earthsciio/backends/local.py:118
+│     │  │     │  │           └─ 0.001 PosixPath.glob  pathlib/__init__.py:843
+│     │  │     │  └─ 0.003 GeoTIFFReader.read_native  earthsciio/readers.py:426
+│     │  │     │     └─ 0.003 _open_raster  earthsciio/readers.py:378
+│     │  │     │        ├─ 0.002 _find_and_load  <frozen importlib._bootstrap>:1360
+│     │  │     │        │  ├─ 0.001 _find_and_load_unlocked  <frozen importlib._bootstrap>:1308
+│     │  │     │        │  └─ 0.001 _ModuleLockManager.__exit__  <frozen importlib._bootstrap>:423
+│     │  │     │        │     └─ 0.001 _ModuleLock.release  <frozen importlib._bootstrap>:372
+│     │  │     │        └─ 0.001 _read_with_tifffile  earthsciio/readers.py:333
+│     │  │     │           └─ 0.001 TiffFile.__init__  tifffile/tifffile.py:4518
+│     │  │     │              └─ 0.001 TiffFile.__getattr__  tifffile/tifffile.py:5347
+│     │  │     │                 └─ 0.001 TiffPages.first  tifffile/tifffile.py:9657
+│     │  │     └─ 0.001 [self]  earthsciio/provider.py
+│     │  └─ 0.002 [self]  earthsci_ast/simulation_loaders.py
+│     └─ 0.582 flatten  earthsci_ast/flatten.py:1088
+│        ├─ 0.560 _apply_variable_map  earthsci_ast/flatten.py:890
+│        │  ├─ 0.461 substitute  earthsci_ast/substitute.py:19
+│        │  │  ├─ 0.454 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  ├─ 0.409 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  ├─ 0.407 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  ├─ 0.405 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  ├─ 0.361 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  ├─ 0.358 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  ├─ 0.353 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  ├─ 0.291 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  ├─ 0.286 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  ├─ 0.282 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.220 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.220 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     ├─ 0.214 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  ├─ 0.156 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  ├─ 0.155 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  ├─ 0.144 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  ├─ 0.103 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  ├─ 0.101 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  ├─ 0.098 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  ├─ 0.078 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.074 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.071 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  ├─ 0.048 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  ├─ 0.047 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.045 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.031 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.029 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.024 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.003 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.002 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.001 _is_dataclass_instance  dataclasses.py:1463
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.010 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.010 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     ├─ 0.007 map_children  earthsci_ast/expr_walk.py:57
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │  ├─ 0.006 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  ├─ 0.005 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  ├─ 0.004 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  └─ 0.001 dict.values  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  └─ 0.001 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │  └─ 0.001 <lambda>  earthsci_ast/substitute.py:49
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │     └─ 0.001 substitute  earthsci_ast/substitute.py:19
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     │        └─ 0.001 isinstance  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     ├─ 0.002 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  │     └─ 0.001 dict.get  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.001 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │  └─ 0.023 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │     ├─ 0.021 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │     │  ├─ 0.013 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │     │  ├─ 0.006 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │     │  └─ 0.002 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │     ├─ 0.001 _is_dataclass_instance  dataclasses.py:1463
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  │     └─ 0.001 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.002 isinstance  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  └─ 0.004 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  ├─ 0.016 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  ├─ 0.014 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.007 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  ├─ 0.005 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  │  └─ 0.002 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  │  └─ 0.002 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  │  └─ 0.001 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  ├─ 0.002 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  └─ 0.002 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  ├─ 0.034 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  ├─ 0.030 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  ├─ 0.020 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  ├─ 0.007 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  │  └─ 0.003 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  ├─ 0.002 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  │  └─ 0.002 _is_dataclass_instance  dataclasses.py:1463
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  ├─ 0.006 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  │  └─ 0.001 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  ├─ 0.009 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  ├─ 0.001 isinstance  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  └─ 0.001 dict.get  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  └─ 0.001 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  ├─ 0.047 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  ├─ 0.043 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  ├─ 0.026 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  ├─ 0.010 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  │  └─ 0.007 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  ├─ 0.002 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │  └─ 0.002 _is_dataclass_instance  dataclasses.py:1463
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │     ├─ 0.001 hasattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  │     └─ 0.001 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  ├─ 0.006 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     │  └─ 0.005 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     ├─ 0.003 isinstance  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │     └─ 0.003 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.056 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.053 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.032 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.014 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.007 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.003 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  │  │  │  │  │  │  └─ 0.002 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  └─ 0.004 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  │  └─ 0.005 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  │  ├─ 0.054 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  │  │  │  ├─ 0.051 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  │  │  │  ├─ 0.031 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  │  ├─ 0.012 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  │  ├─ 0.007 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  │  │  │  │  └─ 0.001 dict.values  <built-in>
+│        │  │  │  │  │  │  │  │  │  │  ├─ 0.002 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  │  │  └─ 0.001 _is_dataclass_instance  dataclasses.py:1463
+│        │  │  │  │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  │  │  │  └─ 0.004 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  ├─ 0.003 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  │  │  └─ 0.002 dict.get  <built-in>
+│        │  │  │  │  │  │  │  └─ 0.003 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  │  │  ├─ 0.036 replace  dataclasses.py:1754
+│        │  │  │  │  │  │  │  ├─ 0.032 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  │  │  │  ├─ 0.021 [self]  dataclasses.py
+│        │  │  │  │  │  │  │  │  ├─ 0.009 getattr  <built-in>
+│        │  │  │  │  │  │  │  │  └─ 0.002 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  │  │  └─ 0.004 [self]  dataclasses.py
+│        │  │  │  │  │  │  ├─ 0.007 [self]  earthsci_ast/expr_walk.py
+│        │  │  │  │  │  │  └─ 0.001 getattr  <built-in>
+│        │  │  │  │  │  └─ 0.002 [self]  earthsci_ast/substitute.py
+│        │  │  │  │  └─ 0.002 [self]  earthsci_ast/substitute.py
+│        │  │  │  ├─ 0.041 replace  dataclasses.py:1754
+│        │  │  │  │  ├─ 0.035 ExprNode._replace  dataclasses.py:1773
+│        │  │  │  │  │  ├─ 0.018 [self]  dataclasses.py
+│        │  │  │  │  │  ├─ 0.010 getattr  <built-in>
+│        │  │  │  │  │  ├─ 0.006 ExprNode.__init__  <string>:2
+│        │  │  │  │  │  └─ 0.001 dict.values  <built-in>
+│        │  │  │  │  ├─ 0.005 [self]  dataclasses.py
+│        │  │  │  │  └─ 0.001 _is_dataclass_instance  dataclasses.py:1463
+│        │  │  │  └─ 0.004 [self]  earthsci_ast/expr_walk.py
+│        │  │  ├─ 0.004 isinstance  <built-in>
+│        │  │  ├─ 0.002 dict.get  <built-in>
+│        │  │  └─ 0.001 [self]  earthsci_ast/substitute.py
+│        │  ├─ 0.092 FlattenedEquation.__init__  <string>:2
+│        │  │  └─ 0.092 FlattenedEquation.__post_init__  earthsci_ast/flatten.py:176
+│        │  │     ├─ 0.089 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  ├─ 0.049 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  ├─ 0.039 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  ├─ 0.031 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  ├─ 0.022 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  │  ├─ 0.013 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  │  │  ├─ 0.008 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  │  │  │  ├─ 0.003 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  │  │  │  │  ├─ 0.002 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  │  │  │  │  └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  │  │  │  │     └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │  │  │  │  │  │  │        └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  │  │  │  │  │  │           └─ 0.001 isinstance  <built-in>
+│        │  │     │  │  │  │  │  │  │  ├─ 0.003 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  │  │  │  │  │  │  ├─ 0.002 isinstance  <built-in>
+│        │  │     │  │  │  │  │  │  │  │  └─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  │  │  │  ├─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  │  │  │  └─ 0.001 isinstance  <built-in>
+│        │  │     │  │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  │  │  └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  │  │  │  ├─ 0.007 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  │  └─ 0.002 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  │  │  │     ├─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  │     └─ 0.001 isinstance  <built-in>
+│        │  │     │  │  │  │  ├─ 0.005 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  │  ├─ 0.002 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  │  │  ├─ 0.001 isinstance  <built-in>
+│        │  │     │  │  │  │  └─ 0.001 str.join  <built-in>
+│        │  │     │  │  │  ├─ 0.006 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  │  ├─ 0.001 isinstance  <built-in>
+│        │  │     │  │  │  └─ 0.001 str.join  <built-in>
+│        │  │     │  │  ├─ 0.004 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  ├─ 0.003 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  ├─ 0.002 isinstance  <built-in>
+│        │  │     │  │  └─ 0.001 str.join  <built-in>
+│        │  │     │  ├─ 0.023 <genexpr>  earthsci_ast/flatten.py:312
+│        │  │     │  │  └─ 0.023 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     ├─ 0.021 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  ├─ 0.020 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │  └─ 0.020 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │     ├─ 0.018 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │     │  ├─ 0.016 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │     │  │  ├─ 0.015 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │     │  │  │  ├─ 0.012 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │     │  │  │  │  ├─ 0.007 _expr_to_string  earthsci_ast/flatten.py:283
+│        │  │     │  │     │  │     │  │  │  │  │  ├─ 0.004 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     │  │     │  │  │  │  │  └─ 0.003 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │     │  │     │  │  │  │  │     ├─ 0.002 isinstance  <built-in>
+│        │  │     │  │     │  │     │  │  │  │  │     └─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     │  │     │  │  │  │  └─ 0.005 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     │  │     │  │  │  ├─ 0.002 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     │  │     │  │  │  └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │     │  │     │  │  │     └─ 0.001 isinstance  <built-in>
+│        │  │     │  │     │  │     │  │  └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │     │  │     │  ├─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     │  │     │  └─ 0.001 isinstance  <built-in>
+│        │  │     │  │     │  │     ├─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     │  │     └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │     │  │        └─ 0.001 isinstance  <built-in>
+│        │  │     │  │     │  └─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │     │  │     └─ 0.002 <genexpr>  earthsci_ast/flatten.py:308
+│        │  │     │  ├─ 0.009 [self]  earthsci_ast/flatten.py
+│        │  │     │  ├─ 0.003 _is_number  earthsci_ast/flatten.py:279
+│        │  │     │  │  ├─ 0.002 [self]  earthsci_ast/flatten.py
+│        │  │     │  │  └─ 0.001 isinstance  <built-in>
+│        │  │     │  ├─ 0.003 <genexpr>  earthsci_ast/flatten.py:308
+│        │  │     │  └─ 0.002 str.join  <built-in>
+│        │  │     └─ 0.003 [self]  earthsci_ast/flatten.py
+│        │  └─ 0.007 [self]  earthsci_ast/flatten.py
+│        ├─ 0.017 _collect_model  earthsci_ast/flatten.py:544
+│        │  ├─ 0.013 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │  └─ 0.013 map_children  earthsci_ast/expr_walk.py:57
+│        │  │     └─ 0.013 <lambda>  earthsci_ast/flatten.py:406
+│        │  │        └─ 0.013 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           ├─ 0.011 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │  └─ 0.011 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │     └─ 0.011 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        ├─ 0.009 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  ├─ 0.006 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │  └─ 0.006 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │     └─ 0.006 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │        └─ 0.006 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │           └─ 0.006 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │              ├─ 0.005 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │              │  ├─ 0.004 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │              │  │  └─ 0.004 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │              │  │     └─ 0.004 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │              │  │        ├─ 0.003 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │              │  │        │  └─ 0.003 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │              │  │        │     └─ 0.003 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │              │  │        │        ├─ 0.002 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │              │  │        │        │  └─ 0.002 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │              │  │        │        │     └─ 0.002 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │              │  │        │        │        └─ 0.002 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │              │  │        │        │           └─ 0.002 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │              │  │        │        │              └─ 0.002 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │              │  │        │        │                 ├─ 0.001 <lambda>  earthsci_ast/flatten.py:406
+│        │  │           │        │  │              │  │        │        │                 │  └─ 0.001 _namespace_expr  earthsci_ast/flatten.py:339
+│        │  │           │        │  │              │  │        │        │                 │     └─ 0.001 map_children  earthsci_ast/expr_walk.py:57
+│        │  │           │        │  │              │  │        │        │                 └─ 0.001 replace  dataclasses.py:1754
+│        │  │           │        │  │              │  │        │        │                    └─ 0.001 ExprNode._replace  dataclasses.py:1773
+│        │  │           │        │  │              │  │        │        └─ 0.001 replace  dataclasses.py:1754
+│        │  │           │        │  │              │  │        │           └─ 0.001 ExprNode._replace  dataclasses.py:1773
+│        │  │           │        │  │              │  │        └─ 0.001 replace  dataclasses.py:1754
+│        │  │           │        │  │              │  │           └─ 0.001 ExprNode._replace  dataclasses.py:1773
+│        │  │           │        │  │              │  │              └─ 0.001 getattr  <built-in>
+│        │  │           │        │  │              │  └─ 0.001 replace  dataclasses.py:1754
+│        │  │           │        │  │              │     └─ 0.001 ExprNode._replace  dataclasses.py:1773
+│        │  │           │        │  │              └─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │           │        │  └─ 0.003 replace  dataclasses.py:1754
+│        │  │           │        │     └─ 0.003 ExprNode._replace  dataclasses.py:1773
+│        │  │           │        │        ├─ 0.002 [self]  dataclasses.py
+│        │  │           │        │        └─ 0.001 getattr  <built-in>
+│        │  │           │        └─ 0.002 [self]  earthsci_ast/flatten.py
+│        │  │           ├─ 0.001 [self]  earthsci_ast/flatten.py
+│        │  │           └─ 0.001 isinstance  <built-in>
+│        │  └─ 0.004 FlattenedEquation.__init__  <string>:2
+│        │     └─ 0.004 FlattenedEquation.__post_init__  earthsci_ast/flatten.py:176
+│        │        └─ 0.004 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           ├─ 0.003 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  ├─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  │  └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  │     └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  │        └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  │           └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  │              └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        │           │  │                 └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │           │  │                    └─ 0.001 isinstance  <built-in>
+│        │           │  ├─ 0.001 [self]  earthsci_ast/flatten.py
+│        │           │  └─ 0.001 _is_number  earthsci_ast/flatten.py:279
+│        │           │     └─ 0.001 isinstance  <built-in>
+│        │           └─ 0.001 <genexpr>  earthsci_ast/flatten.py:312
+│        │              └─ 0.001 _expr_to_string  earthsci_ast/flatten.py:283
+│        ├─ 0.003 _spatial_dims_in_expr  earthsci_ast/flatten.py:489
+│        │  └─ 0.003 walk  earthsci_ast/expr_walk.py:79
+│        │     └─ 0.003 walk  earthsci_ast/expr_walk.py:79
+│        │        ├─ 0.002 walk  earthsci_ast/expr_walk.py:79
+│        │        │  └─ 0.002 walk  earthsci_ast/expr_walk.py:79
+│        │        │     └─ 0.002 walk  earthsci_ast/expr_walk.py:79
+│        │        │        └─ 0.002 walk  earthsci_ast/expr_walk.py:79
+│        │        │           └─ 0.002 walk  earthsci_ast/expr_walk.py:79
+│        │        │              ├─ 0.001 iter_children  earthsci_ast/expr_walk.py:34
+│        │        │              └─ 0.001 walk  earthsci_ast/expr_walk.py:79
+│        │        └─ 0.001 iter_children  earthsci_ast/expr_walk.py:34
+│        ├─ 0.001 _has_array_op  earthsci_ast/flatten.py:442
+│        │  └─ 0.001 any_child  earthsci_ast/expr_walk.py:52
+│        │     └─ 0.001 <genexpr>  earthsci_ast/expr_walk.py:54
+│        │        └─ 0.001 _has_array_op  earthsci_ast/flatten.py:442
+│        │           └─ 0.001 any_child  earthsci_ast/expr_walk.py:52
+│        │              └─ 0.001 <genexpr>  earthsci_ast/expr_walk.py:54
+│        │                 └─ 0.001 _has_array_op  earthsci_ast/flatten.py:442
+│        │                    └─ 0.001 any_child  earthsci_ast/expr_walk.py:52
+│        │                       └─ 0.001 <genexpr>  earthsci_ast/expr_walk.py:54
+│        └─ 0.001 [self]  earthsci_ast/flatten.py
+└─ 0.001 Profiler.stop  pyinstrument/profiler.py:171
+   └─ 0.001 StackSampler.unsubscribe  pyinstrument/stack_sampler.py:100
+

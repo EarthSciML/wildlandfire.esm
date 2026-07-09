@@ -1,0 +1,45 @@
+# Rust simulate() self-time by leaf function
+# NX=36 NY=40  t_end=7200  wall=30.8s  solver=Erk (diffsol)
+# three real loaders (3DEP + LANDFIRE + ERA5), regridded in-model
+# 1840 samples @ 997 Hz
+#  self%   samples  function
+  20.43       376  earthsci_ast::simulate_array::eval::eval_binary
+  16.30       300  earthsci_ast::simulate_array::eval::eval_index_args
+  16.03       295  std::collections::hash::map::HashMap<K,V,S,A>::contains_key
+  11.52       212  earthsci_ast::simulate_array::eval::eval_index
+  10.38       191  earthsci_ast::simulate_array::eval::filter_excludes
+   6.63       122  ndarray::dimension::dim::Dim
+   3.59        66  <A as core::slice::cmp::SlicePartialEq<B>>::equal_same_length
+   3.32        61  <smallvec::SmallVec<A> as core::iter::traits::collect::FromIterator<<A as smallvec::Array>::Item>>::from_iter
+   2.07        38  earthsci_ast::simulate_array::eval::eval_arith::{{closure}}
+   1.79        33  core::ptr::copy_nonoverlapping
+   1.41        26  earthsci_ast::simulate_array::eval::eval_arrayop
+   1.25        23  earthsci_ast::simulate_array::eval::combine
+   0.71        13  earthsci_ast::simulate_array::eval::reduce_contraction
+   0.54        10  earthsci_ast::simulate_array::eval::index_into
+   0.54        10  earthsci_ast::simulate_array::eval::combine::{{closure}}
+   0.43         8  earthsci_ast::simulate_array::eval::broadcast_binary::{{closure}}
+   0.38         7  alloc::alloc::alloc
+   0.33         6  ndarray::impl_methods::<impl ndarray::ArrayBase<S,D>>::index_axis_move
+   0.22         4  <unknown>
+   0.22         4  earthsci_ast::simulate_array::vectorized::vec_combine::{{closure}}
+   0.22         4  ndarray::impl_methods::<impl ndarray::ArrayBase<S,D>>::is_contiguous
+   0.22         4  ndarray::impl_methods::<impl ndarray::ArrayBase<S,D>>::to_owned
+   0.16         3  alloc::raw_vec::RawVecInner<A>::try_allocate_in
+   0.16         3  alloc::alloc::dealloc_nonnull
+   0.11         2  core::ptr::drop_in_place<smallvec::SmallVec<[earthsci_ast::simulate_array::Value; 4]>>
+   0.11         2  earthsci_ast::simulate_array::eval::eval_clip_operands
+   0.05         1  core::ptr::drop_in_place<hashbrown::raw::RawTable<(alloc::string::String,usize)>>
+   0.05         1  <ndarray::CowRepr<A> as ndarray::data_traits::Data>::into_owned
+   0.05         1  hashbrown::raw::RawTableInner::drop_inner_table
+   0.05         1  webpki::der::nested
+   0.05         1  tokio_rustls::common::Stream<IO,C>::read_io
+   0.05         1  core::hash::Hasher::write_u8
+   0.05         1  hashbrown::map::make_hash
+   0.05         1  earthsci_ast::simulate_array::eval::eval_unary::{{closure}}
+   0.05         1  earthsci_ast::simulate_array::layout::col_major_to_arrayd
+   0.05         1  earthsci_ast::simulate_array::eval::eval_expression
+   0.05         1  <alloc::vec::Vec<T> as core::iter::traits::collect::FromIterator<T>>::from_iter
+   0.05         1  <core::hash::sip::Hasher<S> as core::hash::Hasher>::write_str
+   0.05         1  earthsci_ast::geometry::intersect_polygon
+   0.05         1  earthsci_ast::simulate::simulate_with_providers_inspect
