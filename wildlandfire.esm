@@ -2,7 +2,7 @@
   "esm": "0.8.0",
   "metadata": {
     "name": "wildlandfire",
-    "description": "Coupled wildland-fire-spread model, assembled ENTIRELY by reference. The spatial core is the 2-D level-set Hamilton-Jacobi front LevelSetFireSpread (ψ_t = -S(n̂)|∇ψ|, Mandel 2011 / Muñoz-Esparza 2018) on the doubly-periodic Camp-Fire domain 36 km x 40 km (runner binds NX=18, NY=20 -> dx=dy=2000 m, matching archive/camp_fire_model.jl; extent Lx=36000, Ly=40000 set as leaf parameters). The leaf's direction-dependent spread rate S(n̂)=R_0·(1+φ_W+φ_S) is no longer hand-set: its parameters are supplied by a Rothermel + NFDRS behavior stack, all imported by ref from ../earthscimodels and wired by the top-level `coupling` block (variable_map / param_to_var): FuelModelLookup (Anderson 13 fuel models -> σ, w0, δ, Mx, h) and EquilibriumMoistureContent -> OneHourFuelMoisture (T, RH -> dead-fuel moisture Mf) feed RothermelFireSpread (1972), which yields the base rate R_0 and the fuel-specific wind/slope coefficients C_wind, B_wind, E_wind, beta_ratio, phi_s_coeff for the leaf; MidflameWind (10 m wind -> midflame U, u_mf_x/y) and TerrainSlope (dz/dx,dz/dy -> tanφ, aspect) feed both Rothermel and the leaf's normal-projection wind/slope terms; FuelConsumption (Mandel 2011 Eq. 3) is present and receives the initial fuel load. The behavior components (Rothermel/NFDRS) are pointwise, but every one of their inputs is now a real, PER-CELL data-loader field regridded onto the fire grid inside this .esm, so the whole behavior stack is spatially varying: USGS 3DEP terrain -> per-cell dz/dx,dz/dy (TerrainRegrid); LANDFIRE FBFM13 -> per-cell fuel code -> per-cell Anderson-13 fuel properties (regridded in TerrainRegrid, coupled to FuelModelLookup.code); and ERA5 1000 hPa met (t,u,v,r) -> per-cell temperature, humidity and 10 m wind (Era5Regrid, coupled to EquilibriumMoistureContent + MidflameWind). All three loaders are conservatively regridded AT THE COUPLING (esm-spec 8.6); see the TerrainRegrid / Era5Regrid models and the coupling block. The initial perimeter is the InitialPerimeter dedicated IC model (esm-spec §11.4.1): signed distance to a 3000 m ignition circle at (25901, 22807) — the real Camp Fire origin at Pulga (39°48′37″N 121°26′14″W), matching archive/camp_fire_model.jl. The 36×40 km domain is centered on the Pulga–Paradise midpoint (as in the archive), so Pulga sits NE and Paradise (39°45′35″N 121°37′19″W, domain metres ≈ 10099, 17193) SW; the runners mark both towns on the plot. The runner supplies the scalar inputs (fuel code, temperature, relative humidity, 10 m wind, terrain gradient); R_0 is no longer overridden — it comes from Rothermel. Requires the 7 referenced components at esm 0.8.0. TERRAIN DATA LOADER (this revision): the USGS 3DEP terrain data loader (../earthscimodels/components/earthsci_data/usgs3dep.esm, migrated to esm 0.8.0) is now imported by reference as USGS3DEP and supplies a real, per-cell terrain gradient (dzdx, dzdy) in place of the runner's uniform scalar slope. Reprojection and conservative-overlap regridding onto the fire grid are performed AT THE COUPLING (esm-spec 8.6), by the build-once TerrainRegrid model, which imports reprojection/longlat.esm and regridding/{conservative_overlap,cartesian_cell_rings}.esm from ../earthscidiscretizations and applies conservative_overlap_apply; the regridded slopes are wired (param_to_var) into TerrainSlope.dzdx/.dzdy, and thence to Rothermel and the level-set leaf. NOT YET RUN: the source geometry is a coarse stand-in for the runtime-fetched 3DEP raster and the reprojection is the longlat identity base case (a physically-calibrated run needs the fetched raster's cell counts, a georeferenced fire grid, and a projected-CRS reprojection library). USGS3DEP was chosen over LANDFIRE/ERA5 as the loader most likely to actually fetch: a live, no-auth USGS ImageServer endpoint returning a single-band F32 elevation GeoTIFF, with slopes derived declaratively by grad(elevation). RESTRUCTURED (correct esm 0.8.0 loader consumption): USGS3DEP now exposes only the loaded `elevation` (grad-of-loader dzdx/dzdy removed as structurally invalid — a shapeless loader field cannot be differentiated); TerrainRegrid conservatively regrids that ELEVATION onto the fire grid (consumed via index-gathers, not a bare grad), reshapes to [x,y], and computes dzdx/dzdy = D(elevation) with earthscidiscretizations central_D1x/D1y rules imported into TerrainRegrid, then couples the slopes into TerrainSlope. This runs in Julia once the ESS runner lowers data-loader subsystem fields (Python already does).",
+    "description": "Coupled wildland-fire-spread model, assembled ENTIRELY by reference. The spatial core is the 2-D level-set Hamilton-Jacobi front LevelSetFireSpread (ψ_t = -S(n̂)|∇ψ|, Mandel 2011 / Muñoz-Esparza 2018) on the doubly-periodic Camp-Fire domain 36 km x 40 km (the runner binds the grid resolution NX×NY and the domain extent Lx×Ly as leaf parameters; the 36 km × 40 km extent matches archive/camp_fire_model.jl). The leaf's direction-dependent spread rate S(n̂)=R_0·(1+φ_W+φ_S) is no longer hand-set: its parameters are supplied by a Rothermel + NFDRS behavior stack, all imported by ref from ../earthscimodels and wired by the top-level `coupling` block (variable_map / param_to_var): FuelModelLookup (Anderson 13 fuel models -> σ, w0, δ, Mx, h) and EquilibriumMoistureContent -> OneHourFuelMoisture (T, RH -> dead-fuel moisture Mf) feed RothermelFireSpread (1972), which yields the base rate R_0 and the fuel-specific wind/slope coefficients C_wind, B_wind, E_wind, beta_ratio, phi_s_coeff for the leaf; MidflameWind (10 m wind -> midflame U, u_mf_x/y) and TerrainSlope (dz/dx,dz/dy -> tanφ, aspect) feed both Rothermel and the leaf's normal-projection wind/slope terms; FuelConsumption (Mandel 2011 Eq. 3) is present and receives the initial fuel load. The behavior components (Rothermel/NFDRS) are pointwise, but every one of their inputs is now a real, PER-CELL data-loader field regridded onto the fire grid inside this .esm, so the whole behavior stack is spatially varying: USGS 3DEP terrain -> per-cell dz/dx,dz/dy (TerrainRegrid); LANDFIRE FBFM13 -> per-cell fuel code -> per-cell Anderson-13 fuel properties (regridded in TerrainRegrid, coupled to FuelModelLookup.code); and ERA5 single-level near-surface met (2 m t2m, 10 m u10/v10, 2 m dewpoint d2m) -> per-cell temperature, 10 m wind and (Magnus-derived) humidity (Era5Regrid, coupled to EquilibriumMoistureContent + MidflameWind). All three loaders are conservatively regridded AT THE COUPLING (esm-spec 8.6); see the TerrainRegrid / Era5Regrid models and the coupling block. The initial perimeter is the InitialPerimeter dedicated IC model (esm-spec §11.4.1): signed distance to an ignition circle of radius 2*dx (a resolved ignition that scales with the grid resolution) centred at (25901, 22807) — the real Camp Fire origin at Pulga (39°48′37″N 121°26′14″W), matching archive/camp_fire_model.jl. The 36×40 km domain is centered on the Pulga–Paradise midpoint (as in the archive), so Pulga sits NE and Paradise (39°45′35″N 121°37′19″W, domain metres ≈ 10099, 17193) SW; the runners mark both towns on the plot. The runner supplies the scalar inputs (fuel code, temperature, relative humidity, 10 m wind, terrain gradient); R_0 is no longer overridden — it comes from Rothermel. Requires the 7 referenced components at esm 0.8.0. TERRAIN DATA LOADER (this revision): the USGS 3DEP terrain data loader (../earthscimodels/components/earthsci_data/usgs3dep.esm, migrated to esm 0.8.0) is now imported by reference as USGS3DEP and supplies a real, per-cell terrain gradient (dzdx, dzdy) in place of the runner's uniform scalar slope. Reprojection and conservative-overlap regridding onto the fire grid are performed AT THE COUPLING (esm-spec 8.6), by the build-once TerrainRegrid model, which imports reprojection/longlat.esm and regridding/{conservative_overlap,cartesian_cell_rings}.esm from ../earthscidiscretizations and applies conservative_overlap_apply; the regridded slopes are wired (param_to_var) into TerrainSlope.dzdx/.dzdy, and thence to Rothermel and the level-set leaf. NOT YET RUN: the source geometry is a coarse stand-in for the runtime-fetched 3DEP raster and the reprojection is the longlat identity base case (a physically-calibrated run needs the fetched raster's cell counts, a georeferenced fire grid, and a projected-CRS reprojection library). USGS3DEP was chosen over LANDFIRE/ERA5 as the loader most likely to actually fetch: a live, no-auth USGS ImageServer endpoint returning a single-band F32 elevation GeoTIFF, with slopes derived declaratively by grad(elevation). RESTRUCTURED (correct esm 0.8.0 loader consumption): USGS3DEP now exposes only the loaded `elevation` (grad-of-loader dzdx/dzdy removed as structurally invalid — a shapeless loader field cannot be differentiated); TerrainRegrid conservatively regrids that ELEVATION onto the fire grid (consumed via index-gathers, not a bare grad), reshapes to [x,y], and computes dzdx/dzdy = D(elevation) with earthscidiscretizations central_D1x/D1y rules imported into TerrainRegrid, then couples the slopes into TerrainSlope. This runs in Julia once the ESS runner lowers data-loader subsystem fields (Python already does).",
     "license": "MIT",
     "tags": [
       "esd:problem",
@@ -44,23 +44,43 @@
   "index_sets": {
     "src_cells": {
       "kind": "interval",
-      "size": 1440
+      "size": {
+        "op": "*",
+        "args": [
+          4,
+          {
+            "op": "*",
+            "args": [
+              "NX",
+              "NY"
+            ]
+          }
+        ]
+      }
     },
     "src_x": {
       "kind": "interval",
-      "size": 36
+      "size": {
+        "op": "*",
+        "args": [
+          2,
+          "NX"
+        ]
+      }
     },
     "src_y": {
       "kind": "interval",
-      "size": 40
+      "size": {
+        "op": "*",
+        "args": [
+          2,
+          "NY"
+        ]
+      }
     },
     "era5_t": {
       "kind": "interval",
       "size": 2
-    },
-    "era5_lev": {
-      "kind": "interval",
-      "size": 1
     },
     "era5_y": {
       "kind": "interval",
@@ -186,7 +206,19 @@
                     }
                   ]
                 },
-                3000
+                {
+                  "op": "*",
+                  "args": [
+                    2,
+                    {
+                      "op": "/",
+                      "args": [
+                        36000,
+                        "NX"
+                      ]
+                    }
+                  ]
+                }
               ]
             }
           }
@@ -221,7 +253,7 @@
       "ref": "../earthscimodels/components/earthsci_data/landfire.esm"
     },
     "ERA5": {
-      "ref": "../earthscimodels/components/earthsci_data/era5.esm"
+      "ref": "../earthscimodels/components/earthsci_data/era5_single.esm"
     },
     "TerrainRegrid": {
       "reference": {
@@ -231,8 +263,26 @@
         {
           "ref": "../earthscidiscretizations/regridding/conservative_overlap.esm",
           "bindings": {
-            "NSRC": 1440,
-            "NTGT": { "op": "*", "args": ["NX", "NY"] },
+            "NSRC": {
+              "op": "*",
+              "args": [
+                4,
+                {
+                  "op": "*",
+                  "args": [
+                    "NX",
+                    "NY"
+                  ]
+                }
+              ]
+            },
+            "NTGT": {
+              "op": "*",
+              "args": [
+                "NX",
+                "NY"
+              ]
+            },
             "NVERT": 4
           }
         },
@@ -240,8 +290,20 @@
           "ref": "../earthscidiscretizations/regridding/cartesian_cell_rings.esm",
           "prefix": "src",
           "bindings": {
-            "GX": 36,
-            "GY": 40
+            "GX": {
+              "op": "*",
+              "args": [
+                2,
+                "NX"
+              ]
+            },
+            "GY": {
+              "op": "*",
+              "args": [
+                2,
+                "NY"
+              ]
+            }
           }
         },
         {
@@ -261,10 +323,40 @@
         {
           "ref": "../earthscidiscretizations/regridding/cartesian_nearest_regrid.esm",
           "bindings": {
-            "NSRC": 1440,
-            "NTGT": { "op": "*", "args": ["NX", "NY"] },
-            "GX_SRC": 36,
-            "GY_SRC": 40
+            "NSRC": {
+              "op": "*",
+              "args": [
+                4,
+                {
+                  "op": "*",
+                  "args": [
+                    "NX",
+                    "NY"
+                  ]
+                }
+              ]
+            },
+            "NTGT": {
+              "op": "*",
+              "args": [
+                "NX",
+                "NY"
+              ]
+            },
+            "GX_SRC": {
+              "op": "*",
+              "args": [
+                2,
+                "NX"
+              ]
+            },
+            "GY_SRC": {
+              "op": "*",
+              "args": [
+                2,
+                "NY"
+              ]
+            }
           }
         }
       ],
@@ -358,8 +450,15 @@
               "args": [
                 "F_raw",
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        "NY"
+                      ]
+                    },
                     {
                       "op": "floor",
                       "args": [
@@ -373,12 +472,17 @@
                                 1
                               ]
                             },
-                            36
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                "NX"
+                              ]
+                            }
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -397,7 +501,13 @@
                         {
                           "op": "*",
                           "args": [
-                            36,
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                "NX"
+                              ]
+                            },
                             {
                               "op": "floor",
                               "args": [
@@ -411,7 +521,13 @@
                                         1
                                       ]
                                     },
-                                    36
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        2,
+                                        "NX"
+                                      ]
+                                    }
                                   ]
                                 }
                               ]
@@ -751,8 +867,15 @@
               "args": [
                 "F_fuel_raw",
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    {
+                      "op": "*",
+                      "args": [
+                        2,
+                        "NY"
+                      ]
+                    },
                     {
                       "op": "floor",
                       "args": [
@@ -766,12 +889,17 @@
                                 1
                               ]
                             },
-                            36
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                "NX"
+                              ]
+                            }
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -790,7 +918,13 @@
                         {
                           "op": "*",
                           "args": [
-                            36,
+                            {
+                              "op": "*",
+                              "args": [
+                                2,
+                                "NX"
+                              ]
+                            },
                             {
                               "op": "floor",
                               "args": [
@@ -804,7 +938,13 @@
                                         1
                                       ]
                                     },
-                                    36
+                                    {
+                                      "op": "*",
+                                      "args": [
+                                        2,
+                                        "NX"
+                                      ]
+                                    }
                                   ]
                                 }
                               ]
@@ -981,7 +1121,13 @@
           "prefix": "ov5",
           "bindings": {
             "NSRC": 25,
-            "NTGT": { "op": "*", "args": ["NX", "NY"] },
+            "NTGT": {
+              "op": "*",
+              "args": [
+                "NX",
+                "NY"
+              ]
+            },
             "NVERT": 4
           }
         },
@@ -1003,7 +1149,7 @@
         }
       ],
       "reference": {
-        "notes": "Conservative-overlap regridder that transfers ERA5 1000 hPa surface met (t,u,v,r) from its coarse 0.25deg lon/lat grid onto the fire [x,y] grid — the SAME esm-spec 8.6 pattern as TerrainRegrid, proving a genuine cross-grid regrid (coarse geographic -> fine fire grid), not a domain average. 3D->2D: each ERA5 loader field arrives as F_*[era5_t,era5_lev,era5_y,era5_x] (the NetCDF (valid_time,pressure_level,lat,lon)); F_*_h selects the single time+level (index 1,1) and reindexes the horizontal lat/lon into the src cell-ring order (lon x-fastest; lat flipped because the ERA5 lat axis descends N->S while cartesian_cell_rings enumerates S->N). GEOMETRY: the ERA5 cells are placed at their TRUE positions in the fire metre-frame via src_x0/src_dx/src_y0/src_dy (an equirectangular map of the ERA5 grid's lon/lat against the fire bbox, supplied by the runner), so the overlap generalizes to a moved/larger fire domain — a fire cell picks up whichever ERA5 cell(s) actually cover it. Uses prefixed (ov5/e5s/e5t) overlap weights so it coexists with the 1440-cell TerrainRegrid. The regridded t_xy/u_xy/v_xy/rh_xy couple into EMC + MidflameWind, promoting the behavior stack to per-cell met. GENERALIZE CAVEAT: the ERA5 grid SIZE (5x5) is a bound integer literal (like terrain's 36x40); a very different domain re-binds GX/GY/NSRC, but the overlap geometry itself is fully parameterized."
+        "notes": "Conservative-overlap regridder that transfers ERA5 SINGLE-LEVEL near-surface met (2 m t2m, 10 m u10/v10, 2 m dewpoint d2m) from its coarse 0.25deg lon/lat grid onto the fire [x,y] grid — the SAME esm-spec 8.6 pattern as TerrainRegrid, a genuine cross-grid regrid (coarse geographic -> fine fire grid). Single-level fields have NO vertical dimension: each loader field arrives as F_*[era5_t,era5_y,era5_x] (NetCDF (valid_time,lat,lon)); F_*_h selects the single time record and reindexes the horizontal lat/lon into the src cell-ring order (lon x-fastest; lat flipped because the ERA5 lat axis descends N->S while cartesian_cell_rings enumerates S->N). GEOMETRY: ERA5 cells are placed at their TRUE positions in the fire metre-frame via src_x0/src_dx/src_y0/src_dy. RH is not an ERA5 single-level variable, so relative humidity rh_xy is DERIVED per cell from the regridded, time-blended t_xy + d_xy via Magnus/Tetens. Uses prefixed (ov5/e5s/e5t) overlap weights so it coexists with TerrainRegrid. The regridded t_xy/u_xy/v_xy/rh_xy couple into EMC + MidflameWind. The ERA5 grid SIZE (5x5) is a bound integer literal; a different domain re-binds GX/GY/NSRC."
       },
       "variables": {
         "atol": {
@@ -1065,48 +1211,44 @@
           "units": "K",
           "shape": [
             "era5_t",
-            "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa temperature (K) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.t."
+          "description": "ERA5 single-level 2 m temperature (K) on the era5 sub-grid, the two records bracketing the current time [valid_time,lat,lon]=[era5_t,era5_y,era5_x] (records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.sl.t2m. Single-level surface fields have NO vertical dimension (no pressure_level)."
         },
         "F_u": {
           "type": "parameter",
           "units": "m/s",
           "shape": [
             "era5_t",
-            "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa zonal wind u (m/s) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.u."
+          "description": "ERA5 single-level 10 m zonal wind u (m/s) on the era5 sub-grid, the two records bracketing the current time [valid_time,lat,lon]=[era5_t,era5_y,era5_x] (records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.sl.u10. Single-level surface fields have NO vertical dimension (no pressure_level)."
         },
         "F_v": {
           "type": "parameter",
           "units": "m/s",
           "shape": [
             "era5_t",
-            "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa meridional wind v (m/s) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.v."
+          "description": "ERA5 single-level 10 m meridional wind v (m/s) on the era5 sub-grid, the two records bracketing the current time [valid_time,lat,lon]=[era5_t,era5_y,era5_x] (records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.sl.v10. Single-level surface fields have NO vertical dimension (no pressure_level)."
         },
-        "F_r": {
+        "F_d": {
           "type": "parameter",
-          "units": "%",
+          "units": "K",
           "shape": [
             "era5_t",
-            "era5_lev",
             "era5_y",
             "era5_x"
           ],
           "default": 0.0,
-          "description": "ERA5 1000 hPa relative humidity (%) on the era5 sub-grid, the two records bracketing the current time [valid_time,pressure_level,lat,lon]=[era5_t,era5_lev,era5_y,era5_x] (the records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.pl.r."
+          "description": "ERA5 single-level 2 m dewpoint temperature (K) on the era5 sub-grid, the two records bracketing the current time [valid_time,lat,lon]=[era5_t,era5_y,era5_x] (records_per_sample=2 provider returns 2 bracketing records; the model blends them in time via ERA5.w_time), coupled from ERA5.sl.d2m. Relative humidity is DERIVED downstream from t2m+d2m via the Magnus/Tetens formula (rh_xy)."
         },
         "src_poly": {
           "type": "observed",
@@ -1211,10 +1353,10 @@
               "args": [
                 "F_t",
                 1,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -1232,8 +1374,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -1307,10 +1448,10 @@
               "args": [
                 "F_t",
                 2,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -1328,8 +1469,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -1612,10 +1752,10 @@
               "args": [
                 "F_u",
                 1,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -1633,8 +1773,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -1708,10 +1847,10 @@
               "args": [
                 "F_u",
                 2,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -1729,8 +1868,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -2013,10 +2151,10 @@
               "args": [
                 "F_v",
                 1,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -2034,8 +2172,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -2109,10 +2246,10 @@
               "args": [
                 "F_v",
                 2,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -2130,8 +2267,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -2389,13 +2525,13 @@
             }
           }
         },
-        "F_r_h0": {
+        "F_d_h0": {
           "type": "observed",
           "units": "1",
           "shape": [
             "ov5.src_cells"
           ],
-          "description": "Bracket record 0 (era5_t index 1) of the 2-record time bracket. F_r: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "description": "Bracket record 0 (era5_t index 1) of the 2-record time bracket. F_d (2 m dewpoint): single-time slice reindexed into the src cell-ring order (lon x-fastest, lat flipped N->S), matching TerrainRegrid.F_elev.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -2407,17 +2543,17 @@
               }
             },
             "args": [
-              "F_r"
+              "F_d"
             ],
             "expr": {
               "op": "index",
               "args": [
-                "F_r",
-                1,
+                "F_d",
                 1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -2435,8 +2571,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -2485,13 +2620,13 @@
             }
           }
         },
-        "F_r_h1": {
+        "F_d_h1": {
           "type": "observed",
           "units": "1",
           "shape": [
             "ov5.src_cells"
           ],
-          "description": "Bracket record 1 (era5_t index 2) of the 2-record time bracket. F_r: single time+level slice (index 1,1) reindexed into the src cell-ring order, matching TerrainRegrid.F_elev's [lat,lon]->cell-ring map.",
+          "description": "Bracket record 1 (era5_t index 2) of the 2-record time bracket. F_d (2 m dewpoint): single-time slice reindexed into the src cell-ring order (lon x-fastest, lat flipped N->S), matching TerrainRegrid.F_elev.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -2503,17 +2638,17 @@
               }
             },
             "args": [
-              "F_r"
+              "F_d"
             ],
             "expr": {
               "op": "index",
               "args": [
-                "F_r",
+                "F_d",
                 2,
-                1,
                 {
-                  "op": "+",
+                  "op": "-",
                   "args": [
+                    5,
                     {
                       "op": "floor",
                       "args": [
@@ -2531,8 +2666,7 @@
                           ]
                         }
                       ]
-                    },
-                    1
+                    }
                   ]
                 },
                 {
@@ -2581,13 +2715,13 @@
             }
           }
         },
-        "r_regridded0": {
+        "d_regridded0": {
           "type": "observed",
           "units": "1",
           "shape": [
             "ov5.tgt_cells"
           ],
-          "description": "Bracket record 0: F_r_h conservatively regridded onto the fire cells (ov5 weights).",
+          "description": "Bracket record 0: F_d_h0 conservatively regridded onto the fire cells (ov5 weights).",
           "expression": {
             "op": "apply_expression_template",
             "name": "ov5.conservative_overlap_apply",
@@ -2595,18 +2729,18 @@
             "bindings": {
               "A_ij": "A_ij",
               "A_j": "A_j",
-              "F_src": "F_r_h0",
+              "F_src": "F_d_h0",
               "atol": "atol"
             }
           }
         },
-        "r_regridded1": {
+        "d_regridded1": {
           "type": "observed",
           "units": "1",
           "shape": [
             "ov5.tgt_cells"
           ],
-          "description": "Bracket record 1: F_r_h conservatively regridded onto the fire cells (ov5 weights).",
+          "description": "Bracket record 1: F_d_h1 conservatively regridded onto the fire cells (ov5 weights).",
           "expression": {
             "op": "apply_expression_template",
             "name": "ov5.conservative_overlap_apply",
@@ -2614,19 +2748,19 @@
             "bindings": {
               "A_ij": "A_ij",
               "A_j": "A_j",
-              "F_src": "F_r_h1",
+              "F_src": "F_d_h1",
               "atol": "atol"
             }
           }
         },
-        "rh_xy0": {
+        "d_xy0": {
           "type": "observed",
-          "units": "1",
+          "units": "K",
           "shape": [
             "x",
             "y"
           ],
-          "description": "Bracket record 0 regridded to [x,y]. Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "description": "Bracket record 0 regridded to [x,y]. Per-cell 2 m dewpoint (K); blended in time into d_xy, then RH derived via Magnus (rh_xy).",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -2642,49 +2776,43 @@
               }
             },
             "args": [
-              "r_regridded0"
+              "d_regridded0"
             ],
             "expr": {
-              "op": "*",
+              "op": "index",
               "args": [
-                0.01,
+                "d_regridded0",
                 {
-                  "op": "index",
+                  "op": "+",
                   "args": [
-                    "r_regridded0",
                     {
-                      "op": "+",
+                      "op": "*",
                       "args": [
                         {
-                          "op": "*",
+                          "op": "-",
                           "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "gy",
-                                1
-                              ]
-                            },
-                            "NX"
+                            "gy",
+                            1
                           ]
                         },
-                        "gx"
+                        "NX"
                       ]
-                    }
+                    },
+                    "gx"
                   ]
                 }
               ]
             }
           }
         },
-        "rh_xy1": {
+        "d_xy1": {
           "type": "observed",
-          "units": "1",
+          "units": "K",
           "shape": [
             "x",
             "y"
           ],
-          "description": "Bracket record 1 regridded to [x,y]. Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "description": "Bracket record 1 regridded to [x,y]. Per-cell 2 m dewpoint (K); blended in time into d_xy, then RH derived via Magnus (rh_xy).",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -2700,49 +2828,43 @@
               }
             },
             "args": [
-              "r_regridded1"
+              "d_regridded1"
             ],
             "expr": {
-              "op": "*",
+              "op": "index",
               "args": [
-                0.01,
+                "d_regridded1",
                 {
-                  "op": "index",
+                  "op": "+",
                   "args": [
-                    "r_regridded1",
                     {
-                      "op": "+",
+                      "op": "*",
                       "args": [
                         {
-                          "op": "*",
+                          "op": "-",
                           "args": [
-                            {
-                              "op": "-",
-                              "args": [
-                                "gy",
-                                1
-                              ]
-                            },
-                            "NX"
+                            "gy",
+                            1
                           ]
                         },
-                        "gx"
+                        "NX"
                       ]
-                    }
+                    },
+                    "gx"
                   ]
                 }
               ]
             }
           }
         },
-        "rh_xy": {
+        "d_xy": {
           "type": "observed",
-          "units": "1",
+          "units": "K",
           "shape": [
             "x",
             "y"
           ],
-          "description": "TIME-INTERPOLATED per-cell field: linear blend of the two bracketing ERA5 records after each is conservatively regridded to the fire grid — (1-w_time)*rh_xy0 + w_time*rh_xy1. Because conservative regrid is linear this equals regridding a time-blended field, but keeps the expensive overlap regrid at the discrete hourly cadence and makes only this cheap per-cell blend continuous in t. w_time is coupled from ERA5.w_time. Per-cell relative humidity (0-1 fraction; ERA5 r is %, so *0.01) -> EMC.RH.",
+          "description": "TIME-INTERPOLATED per-cell 2 m dewpoint (K): linear blend of the two bracketing ERA5 records after each is conservatively regridded to the fire grid — (1-w_time)*d_xy0 + w_time*d_xy1. Feeds the Magnus RH (rh_xy) together with t_xy. w_time is coupled from ERA5.w_time.",
           "expression": {
             "op": "aggregate",
             "output_idx": [
@@ -2758,8 +2880,8 @@
               }
             },
             "args": [
-              "rh_xy0",
-              "rh_xy1"
+              "d_xy0",
+              "d_xy1"
             ],
             "expr": {
               "op": "+",
@@ -2777,7 +2899,7 @@
                     {
                       "op": "index",
                       "args": [
-                        "rh_xy0",
+                        "d_xy0",
                         "gx",
                         "gy"
                       ]
@@ -2791,9 +2913,137 @@
                     {
                       "op": "index",
                       "args": [
-                        "rh_xy1",
+                        "d_xy1",
                         "gx",
                         "gy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "rh_xy": {
+          "type": "observed",
+          "units": "1",
+          "shape": [
+            "x",
+            "y"
+          ],
+          "description": "Per-cell relative humidity (0-1 fraction) DERIVED from the time-blended ERA5 single-level fields t_xy (2 m T) and d_xy (2 m dewpoint) via Magnus/Tetens RH = e_s(Td)/e_s(T) = exp(A(Td)-A(T)), A(K)=17.62*(K-273.15)/(243.12+(K-273.15)); the 6.112 cancels in the ratio. Because both fields are conservatively regridded and time-blended, Td<=T pointwise (convexity), so the ratio is already in (0,1] with NO clamp needed. Single-level ERA5 carries no RH variable. -> EMC.RH.",
+          "expression": {
+            "op": "aggregate",
+            "output_idx": [
+              "gx",
+              "gy"
+            ],
+            "ranges": {
+              "gx": {
+                "from": "x"
+              },
+              "gy": {
+                "from": "y"
+              }
+            },
+            "args": [
+              "t_xy",
+              "d_xy"
+            ],
+            "expr": {
+              "op": "exp",
+              "args": [
+                {
+                  "op": "-",
+                  "args": [
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            17.62,
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "d_xy",
+                                    "gx",
+                                    "gy"
+                                  ]
+                                },
+                                273.15
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            243.12,
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "d_xy",
+                                    "gx",
+                                    "gy"
+                                  ]
+                                },
+                                273.15
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "/",
+                      "args": [
+                        {
+                          "op": "*",
+                          "args": [
+                            17.62,
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "t_xy",
+                                    "gx",
+                                    "gy"
+                                  ]
+                                },
+                                273.15
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "+",
+                          "args": [
+                            243.12,
+                            {
+                              "op": "-",
+                              "args": [
+                                {
+                                  "op": "index",
+                                  "args": [
+                                    "t_xy",
+                                    "gx",
+                                    "gy"
+                                  ]
+                                },
+                                273.15
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -2814,151 +3064,19 @@
   },
   "coupling": [
     {
-      "type": "variable_map",
-      "from": "FuelModelLookup.sigma",
-      "to": "RothermelFireSpread.sigma",
-      "transform": "param_to_var",
-      "description": "Fuel surface-area-to-volume ratio σ (Anderson FM code -> Rothermel)."
-    },
-    {
-      "type": "variable_map",
-      "from": "FuelModelLookup.w_0",
-      "to": "RothermelFireSpread.w0",
-      "transform": "param_to_var",
-      "description": "Oven-dry fuel load w0."
-    },
-    {
-      "type": "variable_map",
-      "from": "FuelModelLookup.delta",
-      "to": "RothermelFireSpread.delta",
-      "transform": "param_to_var",
-      "description": "Fuel-bed depth δ."
-    },
-    {
-      "type": "variable_map",
-      "from": "FuelModelLookup.M_x",
-      "to": "RothermelFireSpread.Mx",
-      "transform": "param_to_var",
-      "description": "Dead-fuel moisture of extinction Mx."
-    },
-    {
-      "type": "variable_map",
-      "from": "FuelModelLookup.h",
-      "to": "RothermelFireSpread.h",
-      "transform": "param_to_var",
-      "description": "Fuel low heat content h."
-    },
-    {
-      "type": "variable_map",
-      "from": "EquilibriumMoistureContent.EMC",
-      "to": "OneHourFuelMoisture.EMCPRM",
-      "transform": "param_to_var",
-      "description": "NFDRS equilibrium moisture content -> 1-h interface EMC."
-    },
-    {
-      "type": "variable_map",
-      "from": "OneHourFuelMoisture.MC1",
-      "to": "RothermelFireSpread.Mf",
-      "transform": "param_to_var",
-      "description": "1-h dead-fuel moisture MC1 -> Rothermel fuel moisture Mf."
-    },
-    {
-      "type": "variable_map",
-      "from": "TerrainSlope.slope_aspect",
-      "to": "MidflameWind.slope_aspect",
-      "transform": "param_to_var",
-      "description": "Upslope aspect -> midflame wind direction reference."
-    },
-    {
-      "type": "variable_map",
-      "from": "MidflameWind.U",
-      "to": "RothermelFireSpread.U",
-      "transform": "param_to_var",
-      "description": "Midflame wind speed U."
-    },
-    {
-      "type": "variable_map",
-      "from": "TerrainSlope.tan_phi",
-      "to": "RothermelFireSpread.tan_phi",
-      "transform": "param_to_var",
-      "description": "Slope steepness tanφ."
-    },
-    {
-      "type": "variable_map",
-      "from": "RothermelFireSpread.R0",
-      "to": "LevelSetFireSpread.R_0",
-      "transform": "param_to_var",
-      "description": "No-wind/no-slope base rate of spread R_0 (m/s)."
-    },
-    {
-      "type": "variable_map",
-      "from": "RothermelFireSpread.C_coeff",
-      "to": "LevelSetFireSpread.C_wind",
-      "transform": "param_to_var",
-      "description": "Wind coefficient C (fuel-specific)."
-    },
-    {
-      "type": "variable_map",
-      "from": "RothermelFireSpread.B_coeff",
-      "to": "LevelSetFireSpread.B_wind",
-      "transform": "param_to_var",
-      "description": "Wind exponent B (fuel-specific)."
-    },
-    {
-      "type": "variable_map",
-      "from": "RothermelFireSpread.E_coeff",
-      "to": "LevelSetFireSpread.E_wind",
-      "transform": "param_to_var",
-      "description": "Wind exponent E (fuel-specific)."
-    },
-    {
-      "type": "variable_map",
-      "from": "RothermelFireSpread.beta_ratio",
-      "to": "LevelSetFireSpread.beta_ratio",
-      "transform": "param_to_var",
-      "description": "Relative packing ratio β/β_op."
-    },
-    {
-      "type": "variable_map",
-      "from": "RothermelFireSpread.phi_s_coeff",
-      "to": "LevelSetFireSpread.phi_s_coeff",
-      "transform": "param_to_var",
-      "description": "Slope factor coefficient."
-    },
-    {
-      "type": "variable_map",
-      "from": "MidflameWind.u_mf_x",
-      "to": "LevelSetFireSpread.u_x",
-      "transform": "param_to_var",
-      "description": "Midflame east wind component -> leaf u_x."
-    },
-    {
-      "type": "variable_map",
-      "from": "MidflameWind.u_mf_y",
-      "to": "LevelSetFireSpread.u_y",
-      "transform": "param_to_var",
-      "description": "Midflame north wind component -> leaf u_y."
-    },
-    {
-      "type": "variable_map",
-      "from": "TerrainSlope.dzdx_out",
-      "to": "LevelSetFireSpread.dzdx",
-      "transform": "param_to_var",
-      "description": "Terrain dz/dx -> leaf slope x."
-    },
-    {
-      "type": "variable_map",
-      "from": "TerrainSlope.dzdy_out",
-      "to": "LevelSetFireSpread.dzdy",
-      "transform": "param_to_var",
-      "description": "Terrain dz/dy -> leaf slope y."
-    },
-    {
-      "type": "variable_map",
-      "from": "FuelModelLookup.w_0",
-      "to": "FuelConsumption.w0_initial",
-      "transform": "param_to_var",
-      "description": "Initial fuel load -> consumption model."
+      "type": "coupling_import",
+      "ref": "../earthscimodels/couplings/wildlandfire_behavior.esm",
+      "bind": {
+        "Fuel": "FuelModelLookup",
+        "EMC": "EquilibriumMoistureContent",
+        "FuelMoisture": "OneHourFuelMoisture",
+        "Wind": "MidflameWind",
+        "Slope": "TerrainSlope",
+        "Rothermel": "RothermelFireSpread",
+        "LevelSet": "LevelSetFireSpread",
+        "Consumption": "FuelConsumption"
+      },
+      "description": "Rothermel (1972) + NFDRS behavior stack -> level-set leaf, imported by reference from the WildlandFireBehaviorCoupling library (esm-spec 10.9/10.10). Replaces the 21 formerly-inline param_to_var edges wiring FuelModelLookup/EquilibriumMoistureContent/OneHourFuelMoisture/MidflameWind/TerrainSlope -> RothermelFireSpread and RothermelFireSpread/MidflameWind/TerrainSlope -> LevelSetFireSpread (+ FuelModelLookup -> FuelConsumption). Expands at flatten to those same edges (10.10.3), so this assembly flattens identically to the previous inline form. The data-loader/regrid couplings below stay inline because they wire this model's own in-file TerrainRegrid/Era5Regrid regridders."
     },
     {
       "type": "variable_map",
@@ -2997,31 +3115,31 @@
     },
     {
       "type": "variable_map",
-      "from": "ERA5.pl.t",
+      "from": "ERA5.sl.t2m",
       "to": "Era5Regrid.F_t",
       "transform": "param_to_var",
-      "description": "ERA5 1000 hPa temperature loader field -> Era5Regrid.F_t."
+      "description": "ERA5 single-level 2 m temperature loader field -> Era5Regrid.F_t."
     },
     {
       "type": "variable_map",
-      "from": "ERA5.pl.u",
+      "from": "ERA5.sl.u10",
       "to": "Era5Regrid.F_u",
       "transform": "param_to_var",
-      "description": "ERA5 1000 hPa zonal wind -> Era5Regrid.F_u."
+      "description": "ERA5 single-level 10 m zonal wind -> Era5Regrid.F_u."
     },
     {
       "type": "variable_map",
-      "from": "ERA5.pl.v",
+      "from": "ERA5.sl.v10",
       "to": "Era5Regrid.F_v",
       "transform": "param_to_var",
-      "description": "ERA5 1000 hPa meridional wind -> Era5Regrid.F_v."
+      "description": "ERA5 single-level 10 m meridional wind -> Era5Regrid.F_v."
     },
     {
       "type": "variable_map",
-      "from": "ERA5.pl.r",
-      "to": "Era5Regrid.F_r",
+      "from": "ERA5.sl.d2m",
+      "to": "Era5Regrid.F_d",
       "transform": "param_to_var",
-      "description": "ERA5 1000 hPa relative humidity -> Era5Regrid.F_r."
+      "description": "ERA5 single-level 2 m dewpoint -> Era5Regrid.F_d (RH derived via Magnus)."
     },
     {
       "type": "variable_map",

@@ -11,10 +11,11 @@
 # INSIDE the .esm (esm-spec §8.6): USGS 3DEP terrain elevation (live ImageServer
 # GeoTIFF, no auth) → per-cell dz/dx, dz/dy; LANDFIRE FBFM13 fuel model (live
 # ImageServer GeoTIFF, no auth) → per-cell fuel code → the Anderson-13 fuel
-# properties; and ERA5 1000 hPa surface met (t, u, v, r) from the Copernicus CDS
-# API (~/.cdsapirc auth) → per-cell temperature, humidity and 10 m wind. This runner
-# supplies them by binding EarthSciIO providers to USGS3DEP.raw.elevation,
-# LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r} (plus the ERA5 source geometry, its
+# properties; and ERA5 single-level near-surface met (2 m t2m, 2 m dewpoint d2m,
+# 10 m u10/v10) from the Copernicus CDS API (~/.cdsapirc auth) → per-cell
+# temperature, 10 m wind and (Magnus-derived) humidity. This runner supplies them
+# by binding EarthSciIO providers to USGS3DEP.raw.elevation,
+# LANDFIRE.raw.fuel_model and ERA5.sl.{t2m,u10,v10,d2m} (plus the ERA5 source geometry, its
 # 0.25° cells placed in the fire metre-frame so the regrid generalizes to a moved/
 # larger domain). Loads through EarthSciAST.jl, integrates while saving
 # several snapshots, and plots the front over the terrain with the ERA5 wind (PNG).
@@ -68,16 +69,16 @@ using Plots                         # TiffImages backs EarthSciIO's geotiff read
 const ESS = EarthSciAST
 
 const NT = 6        # number of front snapshots (t = 0 … t_end)
-const NX = 18       # grid cells along x; dx = LX/NX = 2000 m (matches the archive
-const NY = 20       # grid cells along y; dy = LY/NY = 2000 m   camp_fire_model.jl grid)
+const NX = 72       # grid cells along x; dx = LX/NX = 500 m (4x finer than the archive
+const NY = 80       # grid cells along y; dy = LY/NY = 500 m   camp_fire_model.jl grid)
 const LX = 36000.0  # domain width  (m): Camp-Fire extent (half-width 18 km)
 const LY = 40000.0  # domain height (m): Camp-Fire extent (half-width 20 km)
 
 # USGS 3DEP source raster (Paradise, CA / Camp Fire): a single-band F32 elevation
 # GeoTIFF from the live no-auth USGS ImageServer. GX×GY must match TerrainRegrid's
 # conservative_overlap NSRC and its `src` cartesian_cell_rings GX/GY (36×40 = 1440).
-const GX   = 36          # 3DEP + LANDFIRE raster width  (must match TerrainRegrid src 36×40)
-const GY   = 40          # 3DEP + LANDFIRE raster height
+const GX   = 2 * NX      # 3DEP + LANDFIRE raster width  = 2·NX (source 2×-nested in the fire grid)
+const GY   = 2 * NY      # 3DEP + LANDFIRE raster height = 2·NY
 # Camp-Fire domain: the 36×40 km box centered on the Pulga–Paradise midpoint,
 # matching archive/camp_fire_model.jl.
 const BBOX_W, BBOX_S, BBOX_E, BBOX_N = -121.7400, 39.6049, -121.3192, 39.9651
@@ -87,7 +88,7 @@ const BBOX = "$BBOX_W,$BBOX_S,$BBOX_E,$BBOX_N"
 const PULGA_LONLAT    = (-121.437222, 39.810278)   # 39°48′37″N 121°26′14″W (ignition)
 const PARADISE_LONLAT = (-121.621944, 39.759722)   # 39°45′35″N 121°37′19″W
 
-# ERA5 pressure-level (1000 hPa surface) CDS request: a small 0.25° lon/lat block
+# ERA5 single-level (near-surface) CDS request: a small 0.25° lon/lat block
 # around the fire (ERA5_NX×ERA5_NY must match Era5Regrid's ov5 NSRC / e5s GX,GY =
 # 5×5 = 25). The met is TIME-VARYING — a DISCRETE loader at ERA5's native HOURLY
 # cadence — so it refreshes as the fire evolves (winds/humidity change hour to
@@ -117,15 +118,26 @@ landfire_url =
     "https://lfps.usgs.gov/arcgis/rest/services/Landfire_LF2022/LF2022_FBFM13_CONUS/" *
     "ImageServer/exportImage?bbox=$BBOX&bboxSR=4326&imageSR=4326&size=$GX,$GY" *
     "&format=tiff&pixelType=S16&interpolation=+RSP_NearestNeighbor&f=image"
-# ERA5 surface met via CDS: one multi-hour file (1000 hPa t,u,v,r over the two
-# days at hourly cadence → 48 valid_time records). `era5_times` maps each record to
-# solver seconds with the ignition hour (record ERA5_IGNITION_REC) at t=0; earlier
-# records get negative times (never reached), later ones run past t_end — the solver
-# only fires the cadence ticks that land in [0, t_end].
-era5_url = EarthSciIO.era5_pressure_url(ERA5_YEAR, ERA5_MONTH;
-    variables = ["relative_humidity", "temperature",
-                 "u_component_of_wind", "v_component_of_wind"],
-    pressure_levels = [1000], days = ERA5_DAYS, times = ERA5_HOURS, area = ERA5_AREA)
+# ERA5 surface met via CDS: one multi-hour file of SINGLE-LEVEL near-surface fields
+# (2 m t2m + 2 m dewpoint d2m + 10 m u10/v10 over the two days at hourly cadence →
+# 48 valid_time records, NO pressure_level). Preferred over the 1000 hPa pressure
+# level, which sits at/below ground over elevated terrain. RH is derived in-model
+# from t2m+d2m (Magnus). `era5_times` maps each record to solver seconds with the
+# ignition hour (record ERA5_IGNITION_REC) at t=0; earlier records get negative
+# times (never reached), later ones run past t_end — the solver only fires the
+# cadence ticks that land in [0, t_end].
+era5_sl_request = Dict{String,Any}(
+    "product_type" => ["reanalysis"],
+    "variable" => sort(["2m_temperature", "2m_dewpoint_temperature",
+                        "10m_u_component_of_wind", "10m_v_component_of_wind"]),
+    "year" => [string(ERA5_YEAR)],
+    "month" => [lpad(ERA5_MONTH, 2, '0')],
+    "day" => [lpad(d, 2, '0') for d in ERA5_DAYS],
+    "time" => [string(lpad(h, 2, '0'), ":00") for h in ERA5_HOURS],
+    "data_format" => "netcdf",
+    "download_format" => "unarchived",
+    "area" => collect(ERA5_AREA))
+era5_url = EarthSciIO.cds_url("reanalysis-era5-single-levels", era5_sl_request)
 const ERA5_NREC  = length(ERA5_DAYS) * length(ERA5_HOURS)                 # 48
 const era5_times = [(k - ERA5_IGNITION_REC) * 3600.0 for k in 0:(ERA5_NREC - 1)]
 println("fetching   3DEP + LANDFIRE ($(GX)×$(GY)) and ERA5 met ($(ERA5_NX)×$(ERA5_NY), " *
@@ -147,27 +159,27 @@ providers = try
          "LANDFIRE.raw.fuel_model" =>
              EarthSciIO.const_provider(cache, landfire_url;
                  format="geotiff", reader_kwargs=(band_names=["fuel_model"],)),
-         "ERA5.pl.t" => era5p("t"), "ERA5.pl.u" => era5p("u"),
-         "ERA5.pl.v" => era5p("v"), "ERA5.pl.r" => era5p("r"))
+         "ERA5.sl.t2m" => era5p("t2m"), "ERA5.sl.u10" => era5p("u10"),
+         "ERA5.sl.v10" => era5p("v10"), "ERA5.sl.d2m" => era5p("d2m"))
 catch err
     error("could not build the terrain/fuel/met providers for $BBOX\n" *
           "the model requires providers for USGS3DEP.raw.elevation, " *
-          "LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r} (network + ~/.cdsapirc needed).\n" *
+          "LANDFIRE.raw.fuel_model and ERA5.sl.{t2m,u10,v10,d2m} (network + ~/.cdsapirc needed).\n" *
           "underlying error: $err")
 end
 
 # Confirm the ERA5 met is time-INTERPOLATED: at each solver time the provider now
 # returns the TWO records bracketing it; report both bracket means at t=0 and
 # t=t_end (mean over the 5×5 block). This also warms the CDS fetch before the solve.
-let pt = providers["ERA5.pl.t"]
+let pt = providers["ERA5.sl.t2m"]
     brmeans(t) = begin
-        f = EarthSciIO.refresh(pt, t).variables["t"]
+        f = EarthSciIO.refresh(pt, t).variables["t2m"]
         pos = findfirst(==("valid_time"), f.dims)
         r0 = selectdim(f.data, pos, 1); r1 = selectdim(f.data, pos, 2)
         (Float64(sum(r0)) / length(r0), Float64(sum(r1)) / length(r1))
     end
     b0 = brmeans(0.0); be = brmeans(t_end)
-    @printf("ERA5 met is time-INTERPOLATED (2-record bracket): mean 1000 hPa T bracket [%.2f, %.2f] K at t=0 -> [%.2f, %.2f] K at t=%.0f s (model blends each bracket linearly in time)\n",
+    @printf("ERA5 met is time-INTERPOLATED (2-record bracket): mean 2 m T bracket [%.2f, %.2f] K at t=0 -> [%.2f, %.2f] K at t=%.0f s (model blends each bracket linearly in time)\n",
             b0[1], b0[2], be[1], be[2], t_end)
 end
 
@@ -180,6 +192,19 @@ era5_geom = Dict(
     "Era5Regrid.src_dx" => 0.25 * mlon,
     "Era5Regrid.src_y0" => (ERA5_AREA[3] - 0.125 - BBOX_S) * mlat,   # south edge, southmost cell
     "Era5Regrid.src_dy" => 0.25 * mlat)
+
+# Regrid cell geometry: fire-grid spacing (tgt/dx/bin = LX/NX) and the 2×-finer source
+# spacing (src = LX/GX). Track NX/NY so the regrid target grid stays identical to the
+# level-set grid and the source stays 2×-nested in it; the model's numeric defaults
+# (tgt 2000 m / src 1000 m) are only correct at NX=18/NY=20.
+dxf = LX / NX; dyf = LY / NY        # fire-grid (target) spacing
+dxs = LX / GX; dys = LY / GY        # source spacing (2× finer than target)
+regrid_geom = Dict(
+    "TerrainRegrid.tgt_dx" => dxf, "TerrainRegrid.tgt_dy" => dyf,
+    "TerrainRegrid.dx" => dxf, "TerrainRegrid.dy" => dyf,
+    "TerrainRegrid.bin_dx" => dxf, "TerrainRegrid.bin_dy" => dyf,
+    "TerrainRegrid.src_dx" => dxs, "TerrainRegrid.src_dy" => dys,
+    "Era5Regrid.tgt_dx" => dxf, "Era5Regrid.tgt_dy" => dyf)
 
 println("loading    $model_path  (NX=$NX, NY=$NY)")
 file = ESS.load(model_path; metaparameters = Dict("NX" => NX, "NY" => NY))
@@ -199,8 +224,10 @@ sim = ESS.simulate(file, (0.0, t_end);
                                            # cadence anchor (ignition hour), hourly dt
                                            "ERA5.t_interp_ref" => 0.0,
                                            "ERA5.dt_interp" => 3600.0),
-                                      era5_geom),
-                   reltol=1e-2, abstol=1e-3, saveat=ts, inspect=insp)
+                                      era5_geom, regrid_geom),
+                   # reltol=1e-4 (was 1e-2): exact (uncapped) Rothermel spread is stiff
+                   # on steep terrain; 1e-2 under-resolves it. 1e-4 is converged.
+                   reltol=1e-4, abstol=1e-5, saveat=ts, inspect=insp)
 sim.success || error("solver failed: retcode=$(sim.retcode) — $(sim.message)")
 
 # Assemble the primary 2-D field: state elements "<stem>[i,j]", grouped by stem,

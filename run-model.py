@@ -13,10 +13,11 @@
 # expression): (1) USGS 3DEP terrain elevation (live USGS ImageServer GeoTIFF, no
 # auth) → per-cell dz/dx, dz/dy; (2) LANDFIRE FBFM13 fuel model (live USGS
 # ImageServer GeoTIFF, no auth) → per-cell fuel code → the Anderson-13 fuel
-# properties; (3) ERA5 1000 hPa surface met (t, u, v, r) fetched from the Copernicus
-# CDS API (submit/poll/download, ~/.cdsapirc auth) → per-cell temperature, humidity
-# and 10 m wind. This runner supplies them by binding EarthSciIO providers to the
-# loader fields USGS3DEP.raw.elevation, LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r},
+# properties; (3) ERA5 single-level near-surface met (2 m t2m, 2 m dewpoint d2m,
+# 10 m u10/v10) fetched from the Copernicus CDS API (submit/poll/download,
+# ~/.cdsapirc auth) → per-cell temperature, 10 m wind and (Magnus-derived) humidity.
+# This runner supplies them by binding EarthSciIO providers to the
+# loader fields USGS3DEP.raw.elevation, LANDFIRE.raw.fuel_model and ERA5.sl.{t2m,u10,v10,d2m},
 # and the ERA5 source geometry (its 0.25° cells placed in the fire metre-frame so the
 # regrid generalizes to a moved/larger domain). Loads through the earthsci_ast
 # Python binding, integrates with SciPy (RK45) while sampling several snapshots, and
@@ -71,9 +72,33 @@ import earthsciio as esio        # EarthSciIO provides the ESS provider seam via
                                  # (the Python analog of the Julia weakdep ext);
                                  # tifffile backs EarthSciIO's geotiff reader.
 
+# --- diagnostic solver knobs (env-gated; defaults reproduce the standard run) ---
+# ESS_RTOL / ESS_ATOL override the RK45 tolerances. ESS_MAXSTEP caps the solver step
+# (a CFL-style cap); esm.simulate does not expose max_step, so we inject it into every
+# already-imported scipy solve_ivp call site. ESS_TAG suffixes the output PNG so
+# stability experiments don't overwrite each other.
+# rtol=1e-4 (was 1e-2): with the exact (uncapped) Rothermel spread rate the front
+# dynamics are genuinely stiff on steep terrain, and 1e-2 under-resolves them (it
+# over-spreads / drifts). 1e-4 is converged — rtol=1e-5 gives an identical front.
+_RTOL = float(os.environ.get("ESS_RTOL", "1e-4"))
+_ATOL = float(os.environ.get("ESS_ATOL", "1e-5"))
+_TAG = os.environ.get("ESS_TAG", "")
+_MAXSTEP = os.environ.get("ESS_MAXSTEP")
+if _MAXSTEP:
+    import scipy.integrate as _si
+    _orig_solve_ivp = _si.solve_ivp
+    def _solve_ivp_capped(*a, **k):
+        k.setdefault("max_step", float(_MAXSTEP))
+        return _orig_solve_ivp(*a, **k)
+    _si.solve_ivp = _solve_ivp_capped
+    for _n, _m in list(sys.modules.items()):
+        if _n.startswith("earthsci_ast") and getattr(_m, "solve_ivp", None) is _orig_solve_ivp:
+            _m.solve_ivp = _solve_ivp_capped
+    print(f"[solver] max_step capped at {float(_MAXSTEP):g} s (CFL cap)")
+
 NT = 6        # number of front snapshots (t = 0 … t_end)
-NX = 18       # grid cells along x; dx = LX/NX = 2000 m (matches the archive
-NY = 20       # grid cells along y; dy = LY/NY = 2000 m   camp_fire_model.jl grid)
+NX = 72       # grid cells along x; dx = LX/NX = 500 m (4x finer than the archive
+NY = 80       # grid cells along y; dy = LY/NY = 500 m   camp_fire_model.jl grid)
 LX = 36000.0  # domain width  (m): Camp-Fire extent (half-width 18 km)
 LY = 40000.0  # domain height (m): Camp-Fire extent (half-width 20 km)
 
@@ -86,10 +111,14 @@ BBOX = f"{BBOX_W},{BBOX_S},{BBOX_E},{BBOX_N}"
 PULGA_LONLAT    = (-121.437222, 39.810278)   # 39°48′37″N 121°26′14″W (ignition)
 PARADISE_LONLAT = (-121.621944, 39.759722)   # 39°45′35″N 121°37′19″W
 # USGS 3DEP / LANDFIRE source rasters: GX×GY must match TerrainRegrid's
-# conservative_overlap NSRC and its src cartesian_cell_rings GX/GY (36×40 = 1440).
-GX   = 36
-GY   = 40
-# ERA5 pressure-level (1000 hPa surface) CDS request: a small NxN 0.25° lon/lat
+# conservative_overlap NSRC and its src cartesian_cell_rings GX/GY. The source grid
+# is 2× finer than the fire grid (src_dx = LX/GX = tgt_dx/2), so it is exactly
+# 2×-nested in and origin-aligned to the target — the precondition the gated overlap
+# broad-phase relies on. Kept proportional to NX/NY so the regrid stays correct at
+# any resolution (the model's src_x/src_y/src_cells index_sets are 2·NX/2·NY/4·NX·NY).
+GX   = 2 * NX
+GY   = 2 * NY
+# ERA5 single-level (near-surface) CDS request: a small NxN 0.25° lon/lat
 # block around the fire (ERA5_NX×ERA5_NY must match Era5Regrid's ov5 NSRC / e5s
 # GX,GY = 5×5 = 25). DISCRETE (hourly, time-varying): the CDS fetch pulls both
 # Camp-Fire days (8-9 Nov, all 24 h → 48 hourly `valid_time` records) and a
@@ -132,19 +161,32 @@ try:
     fuel = esio.Provider(esio.DataLoader(
         name="LANDFIRE", format="geotiff", url=landfire_url, variables=["fuel_model"],
         temporal=None, reader_kwargs={"band_names": ["fuel_model"]}), cache)
-    # --- ERA5 surface met via CDS (DISCRETE hourly, 1000 hPa: t,u,v,r) --------
+    # --- ERA5 surface met via CDS (DISCRETE hourly, single-level: t2m,d2m,u10,v10)
     # Fetch BOTH Camp-Fire days (8-9 Nov) at all 24 hourly steps → 48 hourly
     # `valid_time` records in one NetCDF; each ERA5 provider is DISCRETE
     # (LoaderTemporal, hourly cadence, time_dim="valid_time"), so it slices ONE
-    # hour's [pressure_level,lat,lon] record per solver tick and the met varies
-    # in-sim. The window (ignition hour → next morning) bounds the refresh
-    # schedule and anchors solver t=0 at 2018-11-08 14:00 UTC.
-    from earthsciio import era5 as _era5
+    # hour's [lat,lon] record per solver tick and the met varies in-sim (single-
+    # level fields have no pressure_level dimension). The window (ignition hour →
+    # next morning) bounds the refresh schedule and anchors solver t=0 at
+    # 2018-11-08 14:00 UTC.
     from earthsciio.backends.cds import encode_cds_url as _enc
-    _req = _era5.era5_request(ERA5_YEAR, ERA5_MONTH, ERA5_DAYS,
-        ["temperature", "u_component_of_wind", "v_component_of_wind", "relative_humidity"],
-        [1000], ERA5_AREA)          # keep all 24 hourly steps (48 records over 2 days)
-    era5_url = _enc(_era5.ERA5_DATASET, _req)
+    # ERA5 SINGLE-LEVEL request (reanalysis-era5-single-levels): near-surface
+    # 2 m T (t2m), 2 m dewpoint (d2m) and 10 m wind (u10,v10) — NO pressure_level.
+    # Preferred over the 1000 hPa pressure level, which is at/below ground over
+    # elevated terrain and extrapolated there. RH is derived in-model from t2m+d2m
+    # (Magnus), since single-level ERA5 has no relative-humidity variable.
+    ERA5_SL_DATASET = "reanalysis-era5-single-levels"
+    _req = {
+        "product_type": ["reanalysis"],
+        "variable": sorted(["2m_temperature", "2m_dewpoint_temperature",
+                             "10m_u_component_of_wind", "10m_v_component_of_wind"]),
+        "year": [str(ERA5_YEAR)], "month": [f"{ERA5_MONTH:02d}"],
+        "day": [f"{d:02d}" for d in sorted(ERA5_DAYS)],
+        "time": [f"{h:02d}:00" for h in range(24)],   # all 24 hourly steps (48 records / 2 days)
+        "data_format": "netcdf", "download_format": "unarchived",
+        "area": [int(a) for a in ERA5_AREA],
+    }
+    era5_url = _enc(ERA5_SL_DATASET, _req)
     # records_per_sample=2: the provider returns the TWO records bracketing the
     # current time (not one floor slice); the model's ERA5.w_time then linearly
     # interpolates the met in time — a smooth ramp between hourly records instead
@@ -159,23 +201,23 @@ try:
             cache, window=(ERA5_IGNITE, ERA5_END))
     providers = {
         "USGS3DEP.raw.elevation": terr, "LANDFIRE.raw.fuel_model": fuel,
-        "ERA5.pl.t": era5_prov("t"), "ERA5.pl.u": era5_prov("u"),
-        "ERA5.pl.v": era5_prov("v"), "ERA5.pl.r": era5_prov("r"),
+        "ERA5.sl.t2m": era5_prov("t2m"), "ERA5.sl.u10": era5_prov("u10"),
+        "ERA5.sl.v10": era5_prov("v10"), "ERA5.sl.d2m": era5_prov("d2m"),
     }
     # Prove the met varies over the run AND is now time-interpolated: at the
     # ignition hour the provider returns the TWO bracketing hourly records; the
     # model blends them with a weight that ramps 0→1 over the hour, so the forcing
     # is continuous rather than a piecewise-constant hourly step.
     def _bracket_means(prov, when):
-        nds = prov.refresh(when)  # interp mode: shape [valid_time=2, lev, lat, lon]
+        nds = prov.refresh(when)  # interp mode: shape [valid_time=2, lat, lon]
         name = (nds.variable_names()[0] if hasattr(nds, "variable_names")
                 else next(iter(nds.variables)))
         d = np.asarray(nds[name].data, dtype=float)
         return float(np.nanmean(d[0])), float(np.nanmean(d[1]))
-    _t_prov = providers["ERA5.pl.t"]
+    _t_prov = providers["ERA5.sl.t2m"]
     _r0, _r1 = _bracket_means(_t_prov, ERA5_IGNITE)
     _e0, _e1 = _bracket_means(_t_prov, ERA5_END)
-    print(f"ERA5 met is time-INTERPOLATED (2-record bracket per tick): mean 1000 hPa T "
+    print(f"ERA5 met is time-INTERPOLATED (2-record bracket per tick): mean 2 m T "
           f"bracket [{_r0:.2f}, {_r1:.2f}] K @ ignition {ERA5_IGNITE:%H:%M}Z "
           f"→ [{_e0:.2f}, {_e1:.2f}] K @ end {ERA5_END:%H:%M}Z; the model blends each "
           f"bracket linearly in time (was piecewise-constant hourly)", file=sys.stderr)
@@ -183,7 +225,7 @@ except Exception as err:
     sys.exit(
         f"could not build the terrain/fuel/met providers for {BBOX}\n"
         "the model requires providers for USGS3DEP.raw.elevation, "
-        "LANDFIRE.raw.fuel_model and ERA5.pl.{t,u,v,r} (network + ~/.cdsapirc needed).\n"
+        "LANDFIRE.raw.fuel_model and ERA5.sl.{t2m,u10,v10,d2m} (network + ~/.cdsapirc needed).\n"
         f"underlying error: {err}"
     )
 
@@ -205,6 +247,20 @@ era5_geom = {
 # so t_interp_ref=0; dt_interp = the hourly ERA5 frequency.
 era5_interp = {"ERA5.t_interp_ref": 0.0, "ERA5.dt_interp": 3600.0}
 
+# Regrid cell geometry: the fire-grid spacing (tgt/dx/bin = LX/NX) and the 2×-finer
+# source spacing (src = LX/GX). These MUST track NX/NY so the regrid target grid
+# stays identical to the level-set grid and the source stays 2×-nested in it; the
+# model's numeric defaults (tgt 2000 m / src 1000 m) are only correct at NX=18/NY=20.
+_dxf, _dyf = LX / NX, LY / NY           # fire-grid (target) spacing
+_dxs, _dys = LX / GX, LY / GY           # source spacing (2× finer than target)
+regrid_geom = {
+    "TerrainRegrid.tgt_dx": _dxf, "TerrainRegrid.tgt_dy": _dyf,
+    "TerrainRegrid.dx": _dxf, "TerrainRegrid.dy": _dyf,
+    "TerrainRegrid.bin_dx": _dxf, "TerrainRegrid.bin_dy": _dyf,
+    "TerrainRegrid.src_dx": _dxs, "TerrainRegrid.src_dy": _dys,
+    "Era5Regrid.tgt_dx": _dxf, "Era5Regrid.tgt_dy": _dyf,
+}
+
 print(f"loading    {model_path}  (NX={NX}, NY={NY})")
 file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
 
@@ -212,15 +268,15 @@ file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
 # Erk. The level-set Godunov Hamiltonian is hyperbolic (non-stiff), so an adaptive
 # explicit RK takes a modest number of steps; the implicit LSODA instead drives its
 # step count up on the non-smooth |∇ψ| and is orders of magnitude slower here.
-print(f"simulating (0.0, {t_end}) with RK45, {NT} snapshots …")
+print(f"simulating (0.0, {t_end}) with RK45, {NT} snapshots (rtol={_RTOL:g} atol={_ATOL:g}) …")
 # `inspect` captures the build-once geometry so we can read the fields the model
 # actually used (TerrainRegrid.elev_xy / fuel_xy, Era5Regrid.t_xy/…) — no re-fetch.
 insp = esm.BuildInspection()
 sim = esm.simulate(
     file, (0.0, t_end),
     parameters={"LevelSetFireSpread.Lx": LX, "LevelSetFireSpread.Ly": LY,
-                **era5_geom, **era5_interp},
-    method="RK45", rtol=1e-2, atol=1e-3,
+                **era5_geom, **era5_interp, **regrid_geom},
+    method="RK45", rtol=_RTOL, atol=_ATOL,
     providers=providers, inspect=insp,
 )
 if not sim.success:
@@ -391,6 +447,6 @@ for spine in ax.spines.values():
 fig.tight_layout()
 
 plot_path = os.path.join(os.path.dirname(os.path.abspath(model_path)),
-                         "front_python.png")
+                         f"front_python{_TAG}.png")
 fig.savefig(plot_path, dpi=150, bbox_inches="tight")
 print(f"wrote plot: {plot_path}")

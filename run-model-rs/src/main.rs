@@ -44,17 +44,17 @@ use plotters::prelude::*;
 use plotters::style::text_anchor::{HPos, Pos, VPos};
 
 const NT: usize = 6; // number of front snapshots (t = 0 … t_end)
-// Grid: NX × NY cells over the LX × LY domain (dx = dy = 2000 m, matching the
+// Grid: NX × NY cells over the LX × LY domain (dx = dy = 500 m, 4x finer than the
 // archive camp_fire_model.jl grid).
-const NX: i64 = 18;
-const NY: i64 = 20;
+const NX: i64 = 72;
+const NY: i64 = 80;
 const LX: f64 = 36000.0; // domain width  (m): Camp-Fire extent (half-width 18 km)
 const LY: f64 = 40000.0; // domain height (m): Camp-Fire extent (half-width 20 km)
 
 // Camp-Fire domain (WGS84 lon/lat). 3DEP + LANDFIRE fetch over this bbox at GX×GY
-// (must match TerrainRegrid's conservative_overlap NSRC / src cell-rings = 36×40).
-const GX: usize = 36;
-const GY: usize = 40;
+// (= 2·NX×2·NY: source 2×-nested in the fire grid, matches TerrainRegrid src cell-rings/NSRC).
+const GX: usize = 2 * NX as usize;
+const GY: usize = 2 * NY as usize;
 // Camp-Fire domain: the archive Pulga–Paradise-midpoint box (matches the
 // current wildlandfire.esm ignition at Pulga (25901, 22807) and run-model.py/.jl).
 const BBOX_W: f64 = -121.7400;
@@ -65,10 +65,10 @@ const BBOX_N: f64 = 39.9651;
 // Pulga ignition origin and Paradise, marked on the plot like the Julia/Python runners.
 const PULGA_LONLAT: (f64, f64) = (-121.437222, 39.810278);
 const PARADISE_LONLAT: (f64, f64) = (-121.621944, 39.759722);
-// ERA5 pressure-level (1000 hPa surface) CDS request: a small 0.25° lon/lat block
+// ERA5 single-level (near-surface) CDS request: a small 0.25° lon/lat block
 // around the fire (ERA5_NX×ERA5_NY must match Era5Regrid's ov5 NSRC / e5s GX,GY =
-// 5×5 = 25), a single ignition-hour snapshot (CONST). No forcing scalars are set
-// here any more — fuel comes from LANDFIRE, temperature/humidity/wind from ERA5,
+// 5×5 = 25). No forcing scalars are set here any more — fuel comes from LANDFIRE,
+// temperature/humidity/wind from ERA5 (2 m T/Td + 10 m u/v; RH derived via Magnus),
 // terrain from 3DEP, all per-cell through the in-model regridders.
 const ERA5_AREA: [i32; 4] = [40, -122, 39, -121]; // [N,W,S,E] — 1° box → 5×5 @ 0.25°
 const ERA5_NX: usize = 5;
@@ -128,15 +128,15 @@ impl CadenceProvider for EioConstProvider {
 /// A DISCRETE (hourly, time-varying) EarthSciIO provider adapted to the ESS
 /// [`CadenceProvider`] seam — the Rust analog of the Julia EIO
 /// `Provider(cadence=DISCRETE, time_dim="valid_time")`. It materializes the whole
-/// multi-hour ERA5 file ONCE (a 4-D `[valid_time, pressure_level, lat, lon]`
+/// multi-hour ERA5 file ONCE (a 3-D `[valid_time, lat, lon]` single-level
 /// field) and, at each solver-second refresh anchor, slices the `valid_time`
-/// record active at that time to a 3-D `[pressure_level, lat, lon]` slice — the
-/// shape the model's now-3-D `Era5Regrid.F_*` reads. `refresh_times` is the file's
-/// hourly grid in SOLVER seconds (record `record0` = ignition hour = t=0).
+/// record active at that time to a 2-D `[lat, lon]` slice, stacking the bracket —
+/// the shape the model's 3-D `Era5Regrid.F_*[era5_t,lat,lon]` reads. `refresh_times`
+/// is the file's hourly grid in SOLVER seconds (record `record0` = ignition hour = t=0).
 struct EioDiscreteProvider {
     /// The bound forcing-variable name (e.g. `"ERA5.pl.t"`).
     var: String,
-    /// The full field, `[valid_time, pressure_level, lat, lon]`, read once.
+    /// The full field, `[valid_time, lat, lon]` (single-level), read once.
     full: ArrayD<f64>,
     /// The `valid_time` record index that maps to solver-second `t = 0`.
     record0: i64,
@@ -173,9 +173,9 @@ impl EioDiscreteProvider {
         k.clamp(0, self.n_records as i64 - 1) as usize
     }
 
-    /// The 4-D `[valid_time=2, pressure_level, lat, lon]` BRACKET at floor record
+    /// The 3-D `[valid_time=2, lat, lon]` BRACKET at floor record
     /// `rec`: records `rec` and `rec+1` stacked on a leading size-2 axis — the
-    /// shape the model's 4-D `Era5Regrid.F_*` reads. At the last record there is no
+    /// shape the model's 3-D `Era5Regrid.F_*` reads. At the last record there is no
     /// successor, so the bracket degenerates to `[rec, rec]` (the model's weight
     /// then holds the endpoint). Mirrors the EarthSciIO provider's bracket mode.
     fn bracket(&self, rec: usize) -> NativeField {
@@ -256,8 +256,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
          &format=tiff&pixelType=S16&interpolation=+RSP_NearestNeighbor&f=image"
     );
     // ERA5 surface met via CDS: a DISCRETE (hourly) `cds://` request spanning two
-    // days (Nov 8-9 2018) × all 24 hours = 48 `valid_time` records, 1000 hPa,
-    // t/u/v/r over ERA5_AREA. The ignition hour (record ERA5_HOUR = 14, i.e.
+    // days (Nov 8-9 2018) × all 24 hours = 48 `valid_time` records, single-level
+    // t2m/d2m/u10/v10 over ERA5_AREA. The ignition hour (record ERA5_HOUR = 14, i.e.
     // 2018-11-08 14:00 UTC) is solver time t = 0; an EioDiscreteProvider slices
     // the record active at each solver hour. The cds transport authenticates from
     // ~/.cdsapirc (auth_realm "cds").
@@ -268,12 +268,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .join(",");
     let era5_req = format!(
         "{{\"area\":[{n5},{w5},{s5},{e5}],\"data_format\":\"netcdf\",\"day\":[\"08\",\"09\"],\
-         \"download_format\":\"unarchived\",\"month\":[\"11\"],\"pressure_level\":[\"1000\"],\
+         \"download_format\":\"unarchived\",\"month\":[\"11\"],\
          \"product_type\":[\"reanalysis\"],\"time\":[{all_hours}],\
-         \"variable\":[\"relative_humidity\",\"temperature\",\"u_component_of_wind\",\
-         \"v_component_of_wind\"],\"year\":[\"2018\"]}}"
+         \"variable\":[\"10m_u_component_of_wind\",\"10m_v_component_of_wind\",\
+         \"2m_dewpoint_temperature\",\"2m_temperature\"],\"year\":[\"2018\"]}}"
     );
-    let era5_url = format!("cds://reanalysis-era5-pressure-levels?{era5_req}");
+    let era5_url = format!("cds://reanalysis-era5-single-levels?{era5_req}");
     eprintln!(
         "fetching   3DEP + LANDFIRE ({GX}×{GY}) and ERA5 met ({ERA5_NX}×{ERA5_NY}) for {bbox} …"
     );
@@ -306,9 +306,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .variables([short])
             .auth_realm("cds");
         let provider = Provider::new(loader, cache.clone(), None).map_err(|e| {
-            format!("build the ERA5.pl.{short} CDS provider (~/.cdsapirc needed): {e}")
+            format!("build the ERA5.sl.{short} CDS provider (~/.cdsapirc needed): {e}")
         })?;
-        EioDiscreteProvider::new(provider, format!("ERA5.pl.{short}"), ERA5_HOUR as i64, 3600.0)
+        EioDiscreteProvider::new(provider, format!("ERA5.sl.{short}"), ERA5_HOUR as i64, 3600.0)
     };
     let mut providers: HashMap<String, Box<dyn CadenceProvider>> = HashMap::new();
     providers.insert("USGS3DEP.raw.elevation".to_string(),
@@ -319,15 +319,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // records bracketing it; print both bracket domain-means at t=0 and t=t_end.
     // The model blends each bracket linearly (was one piecewise-constant record).
     eprintln!("ERA5 met is time-INTERPOLATED (2-record bracket): bracket domain-means at t=0 vs t={t_end}s");
-    for short in ["t", "u", "v", "r"] {
+    for short in ["t2m", "u10", "v10", "d2m"] {
         let p = era5_provider(short)?;
         let (a0, b0) = p.bracket_means(0.0);
         let (ae, be) = p.bracket_means(t_end);
         eprintln!(
-            "  ERA5.pl.{short:<2} record0={} of {} records: bracket [{:.3}, {:.3}] -> [{:.3}, {:.3}]",
+            "  ERA5.sl.{short:<3} record0={} of {} records: bracket [{:.3}, {:.3}] -> [{:.3}, {:.3}]",
             p.record0, p.n_records, a0, b0, ae, be
         );
-        providers.insert(format!("ERA5.pl.{short}"), Box::new(p));
+        providers.insert(format!("ERA5.sl.{short}"), Box::new(p));
     }
 
     // ERA5 src geometry: place the ERA5 sub-grid at its TRUE position in the fire
@@ -340,6 +340,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("Era5Regrid.src_dx", 0.25 * mlon),
         ("Era5Regrid.src_y0", (ERA5_AREA[2] as f64 - 0.125 - BBOX_S) * mlat),
         ("Era5Regrid.src_dy", 0.25 * mlat),
+    ];
+    // Regrid cell geometry: fire-grid spacing (tgt/dx/bin = LX/NX) and the 2×-finer
+    // source spacing (src = LX/GX). Track NX/NY so the regrid target grid stays
+    // identical to the level-set grid and the source stays 2×-nested in it; the model's
+    // numeric defaults (tgt 2000 m / src 1000 m) are only correct at NX=18/NY=20.
+    let (dxf, dyf) = (LX / NX as f64, LY / NY as f64); // fire-grid (target) spacing
+    let (dxs, dys) = (LX / GX as f64, LY / GY as f64); // source spacing (2× finer)
+    let regrid_geom = [
+        ("TerrainRegrid.tgt_dx", dxf), ("TerrainRegrid.tgt_dy", dyf),
+        ("TerrainRegrid.dx", dxf), ("TerrainRegrid.dy", dyf),
+        ("TerrainRegrid.bin_dx", dxf), ("TerrainRegrid.bin_dy", dyf),
+        ("TerrainRegrid.src_dx", dxs), ("TerrainRegrid.src_dy", dys),
+        ("Era5Regrid.tgt_dx", dxf), ("Era5Regrid.tgt_dy", dyf),
     ];
 
     eprintln!("loading    {model_path}  (NX={NX}, NY={NY})");
@@ -354,8 +367,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // explicit RK is the natural choice.
     let opts = SimulateOptions {
         solver: SolverChoice::Erk,
-        reltol: 1e-2,
-        abstol: 1e-3,
+        // reltol=1e-4 (was 1e-2): exact (uncapped) Rothermel spread is stiff on steep
+        // terrain; 1e-2 under-resolves it. 1e-4 is converged (rtol=1e-5 matches).
+        reltol: 1e-4,
+        abstol: 1e-5,
         output_times: Some(times.clone()),
         ..Default::default()
     };
@@ -373,6 +388,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .into_iter()
     .collect();
     for (k, v) in era5_geom {
+        params.insert(k.to_string(), v);
+    }
+    for (k, v) in regrid_geom {
         params.insert(k.to_string(), v);
     }
     // Time-interpolation phase: solver t=0 is the ignition hour (an ERA5 cadence
