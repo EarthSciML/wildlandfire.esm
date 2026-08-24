@@ -272,15 +272,22 @@ print(f"simulating (0.0, {t_end}) with RK45, {NT} snapshots (rtol={_RTOL:g} atol
 # `inspect` captures the build-once geometry so we can read the fields the model
 # actually used (TerrainRegrid.elev_xy / fuel_xy, Era5Regrid.t_xy/…) — no re-fetch.
 insp = esm.BuildInspection()
-sim = esm.simulate(
-    file, (0.0, t_end),
-    parameters={"LevelSetFireSpread.Lx": LX, "LevelSetFireSpread.Ly": LY,
-                **era5_geom, **era5_interp, **regrid_geom},
-    method="RK45", rtol=_RTOL, atol=_ATOL,
-    providers=providers, inspect=insp,
+# EarthSciAST phase 4: build once with `esm_problem`, then `solve`. Everything
+# the BUILD depends on (providers, inspect) moves to construction; only the
+# solver knobs stay on `solve`, under SciML names — `alg` (was `method`),
+# `reltol`/`abstol` (were `rtol`/`atol`). The tolerances stay explicit: the
+# library defaults are now 1e-4/1e-6, and this run needs its own values.
+sim = esm.solve(
+    esm.esm_problem(
+        file, (0.0, t_end),
+        p={"LevelSetFireSpread.Lx": LX, "LevelSetFireSpread.Ly": LY,
+           **era5_geom, **era5_interp, **regrid_geom},
+        providers=providers, inspect=insp,
+    ),
+    alg="RK45", reltol=_RTOL, abstol=_ATOL,
 )
-if not sim.success:
-    sys.exit(f"solver failed: {sim.message}")
+if sim.retcode is not esm.ReturnCode.Success:
+    sys.exit(f"solver failed ({sim.retcode.name}): {sim.message}")
 
 # Assemble the primary 2-D field: element rows "<stem>[i,j]", grouped by stem,
 # indices parsed as integers. sim.vars are the row labels of sim.y (n_rows × n_t).
@@ -307,7 +314,7 @@ dy = LY / ny
 xs = [(i - 0.5) * dx for i in range(1, nx + 1)]
 ys = [(j - 0.5) * dy for j in range(1, ny + 1)]
 
-# SciPy's simulate() samples a dense trajectory rather than exact save times, so
+# SciPy's solve() samples a dense trajectory rather than exact save times, so
 # reconstruct psi at the NT requested snapshots by linear interpolation of each
 # element row (the fixture-runner convention; matches the Julia saveat output to
 # the plot's precision). psi[k] is the NX×NY field at snapshot time ts[k].

@@ -55,13 +55,22 @@ let env = joinpath(HERE, "run-model-jl")
         # DiffEqCallbacks: the DISCRETE-loader refresh callback (PresetTimeCallback that
         # re-samples the time-varying ERA5 met each hour) lives in ESS's
         # EarthSciASTDataRefreshExt, gated on DiffEqCallbacks + SciMLBase.
-        Pkg.add(["OrdinaryDiffEqTsit5", "Plots", "TiffImages", "DiffEqCallbacks"]; io=devnull)
+        # SciMLBase is explicit, not transitive: phase 4 makes `solve` and
+        # `successful_retcode` SciMLBase's own functions (EarthSciAST specializes
+        # `__init`/`__solve` on an `EsmProblem`), and Julia will not let this
+        # script `import` a package the environment does not name.
+        Pkg.add(["OrdinaryDiffEqTsit5", "Plots", "TiffImages", "DiffEqCallbacks",
+                 "SciMLBase"]; io=devnull)
     end
     Pkg.instantiate(; io=devnull)
 end
 
 using EarthSciAST
 import OrdinaryDiffEqTsit5
+# phase 4: `solve` / `successful_retcode` are SciMLBase's own —
+# EarthSciAST specializes `SciMLBase.__init` / `__solve` on an `EsmProblem`
+# rather than exporting copies that would collide with a loaded solver.
+import SciMLBase
 import DiffEqCallbacks             # triggers ESS's DataRefreshExt (discrete-loader refresh)
 using EarthSciIO, TiffImages        # EarthSciIO provides the ESS provider seam via
 using Printf                        # EarthSciASTEarthSciIOExt (loaded on `using`);
@@ -215,25 +224,33 @@ println("simulating (0.0, $t_end) with Tsit5, $NT snapshots …")
 # actually used (TerrainRegrid.elev_xy, the loader elevation conservatively
 # regridded onto the fire [x,y] grid) straight out of the run — no second fetch.
 insp = ESS.BuildInspection()
-sim = ESS.simulate(file, (0.0, t_end);
-                   alg=OrdinaryDiffEqTsit5.Tsit5(),
-                   providers = providers,
-                   parameters = merge(Dict("LevelSetFireSpread.Lx" => LX,
-                                           "LevelSetFireSpread.Ly" => LY,
-                                           # time-interp phase: t=0 is an ERA5
-                                           # cadence anchor (ignition hour), hourly dt
-                                           "ERA5.t_interp_ref" => 0.0,
-                                           "ERA5.dt_interp" => 3600.0),
-                                      era5_geom, regrid_geom),
-                   # reltol=1e-4 (was 1e-2): exact (uncapped) Rothermel spread is stiff
-                   # on steep terrain; 1e-2 under-resolves it. 1e-4 is converged.
-                   reltol=1e-4, abstol=1e-5, saveat=ts, inspect=insp)
-sim.success || error("solver failed: retcode=$(sim.retcode) — $(sim.message)")
+# EarthSciAST phase 4: build once with `esm_problem`, then `solve`. Everything
+# the BUILD depends on (providers, parameters, inspect) moves to construction;
+# only the solver knobs stay on `solve`. The state-name -> slot map now lives on
+# the PROBLEM, since the solution is a plain SciML ODESolution.
+prob = ESS.esm_problem(file, (0.0, t_end);
+                       providers = providers,
+                       p = merge(Dict("LevelSetFireSpread.Lx" => LX,
+                                      "LevelSetFireSpread.Ly" => LY,
+                                      # time-interp phase: t=0 is an ERA5
+                                      # cadence anchor (ignition hour), hourly dt
+                                      "ERA5.t_interp_ref" => 0.0,
+                                      "ERA5.dt_interp" => 3600.0),
+                                 era5_geom, regrid_geom),
+                       inspect=insp)
+# reltol=1e-4 (was 1e-2): exact (uncapped) Rothermel spread is stiff on steep
+# terrain; 1e-2 under-resolves it. 1e-4 is converged. Stated explicitly rather
+# than inherited — the library default is now 1e-4/1e-6, and this run's abstol
+# is not the default's.
+sim = SciMLBase.solve(prob, OrdinaryDiffEqTsit5.Tsit5();
+                      reltol=1e-4, abstol=1e-5, saveat=ts)
+SciMLBase.successful_retcode(sim) ||
+    error("solver failed: retcode=$(sim.retcode)")
 
 # Assemble the primary 2-D field: state elements "<stem>[i,j]", grouped by stem,
 # indices parsed as integers.
 groups = Dict{String,Vector{NTuple{3,Int}}}()   # stem => [(i, j, slot)]
-for (name, slot) in sim.var_map
+for (name, slot) in prob.var_map
     m = match(r"^(.*)\[(\d+),(\d+)\]$", name)
     m === nothing && continue
     push!(get!(groups, m.captures[1], NTuple{3,Int}[]),

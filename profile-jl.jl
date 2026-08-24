@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# profile-jl.jl — CPU sampling profile of the Julia level-set simulate().
+# profile-jl.jl — CPU sampling profile of the Julia level-set build+solve.
 #
 # Uses PProf.jl (third-party; Google pprof) as the analysis tool on top of the
 # stdlib sampling profiler. Loads and drives the SAME three-loader coupled model the
@@ -8,7 +8,7 @@
 # onto the fire grid IN the .esm — 3DEP terrain, LANDFIRE fuel and ERA5 met. It binds
 # those loaders as providers exactly like the runner, so the profile reflects the real
 # coupled workload (the build-time conservative regrid is now a major cost). Warms up
-# once (so JIT compilation is NOT profiled), then samples a single simulate() at the
+# once (so JIT compilation is NOT profiled), then samples a single solve at the
 # 2×-refined NX=36, NY=40 fire grid (double the runner's 18×20). Emits, under ./profiles/:
 #   flamegraph-julia.svg   — pprof flame graph (inclusive)
 #   profile-julia-top.txt  — pprof -top (self time by function)
@@ -18,7 +18,7 @@
 # RUN SINGLE-THREADED:  julia --threads=1 profile-jl.jl [t_end]
 # The level-set solve is serial, but Julia's sampling profiler snapshots EVERY thread
 # each tick — so extra idle worker/GC threads park in `__psynch_cvwait` and swamp the
-# one compute thread. One thread ⇒ the profile reflects actual simulate() compute.
+# one compute thread. One thread ⇒ the profile reflects actual solve compute.
 #
 # Requires a network connection (3DEP + LANDFIRE, no auth) and a Copernicus CDS key in
 # ~/.cdsapirc (ERA5) on the first run; later runs read the warmed cache.
@@ -46,13 +46,16 @@ let env = joinpath(HERE, "profile-jl-env")
         # ERA5 provider's hourly refresh callback fires during the profiled solve
         # (matches run-model.jl; the old const-provider profile did not need it).
         # pprof_jll: the pprof CLI used below to render profile-julia-top.txt + the SVG.
-        Pkg.add(["OrdinaryDiffEqTsit5", "TiffImages", "PProf", "DiffEqCallbacks", "pprof_jll"]; io=devnull)
+        # SciMLBase explicit: phase 4 makes `solve` SciMLBase's own function.
+        Pkg.add(["OrdinaryDiffEqTsit5", "TiffImages", "PProf", "DiffEqCallbacks",
+                 "pprof_jll", "SciMLBase"]; io=devnull)
     end
     Pkg.instantiate(; io=devnull)
 end
 
 using EarthSciAST
 import OrdinaryDiffEqTsit5
+import SciMLBase
 import DiffEqCallbacks           # triggers ESS's DataRefreshExt (discrete-loader refresh)
 using EarthSciIO, TiffImages     # EarthSciIO provides the ESS provider seam + readers.
 using Profile
@@ -118,13 +121,17 @@ params = Dict("LevelSetFireSpread.Lx" => LX, "LevelSetFireSpread.Ly" => LY,
     # time-interp phase: t=0 is an ERA5 cadence anchor (ignition hour); hourly dt.
     "ERA5.t_interp_ref" => 0.0, "ERA5.dt_interp" => 3600.0)
 
-sim_once(tend) = ESS.simulate(file, (0.0, tend); alg=alg, providers=providers,
-                              parameters=params, reltol=1e-2, abstol=1e-3)
+# phase 4: build + solve. Kept as ONE function on purpose — this script
+# profiles the whole path (build-time regrid included), so splitting the two
+# here would change what is being measured.
+sim_once(tend) = SciMLBase.solve(
+    ESS.esm_problem(file, (0.0, tend); providers=providers, p=params),
+    alg; reltol=1e-2, abstol=1e-3)
 
 println("loading    wildlandfire.esm  (NX=$NX, NY=$NY)")
 file = ESS.load_path(joinpath(HERE, "wildlandfire.esm"); metaparameters=Dict("NX"=>NX, "NY"=>NY))
 
-# Warm up: force JIT compilation of the whole simulate path (incl. the build-time
+# Warm up: force JIT compilation of the whole build+solve path (incl. the build-time
 # regrid) so the profile shows steady-state runtime, not one-shot compilation. This
 # also warms the loader cache (network) so the profiled run reads it locally.
 print("warming up (compiling + loader fetch) … "); flush(stdout)

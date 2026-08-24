@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# profile-py.py — CPU sampling profile of the Python level-set simulate() (pyinstrument).
+# profile-py.py — CPU sampling profile of the Python level-set build+solve (pyinstrument).
 #
 # The Python counterpart of profile-jl.jl and run-model-rs/src/bin/profile.rs. Loads
 # and drives the SAME three-loader coupled model the runner uses (run-model.py): the
@@ -10,7 +10,7 @@
 # profile is unrepresentative of the real coupled workload (the build-time conservative
 # regrid is now the dominant cost, not the solve). Warms up the toolkit import + parse
 # on a throwaway load (sheds one-time first-touch cost), then profiles a single
-# simulate() at a 2×-refined NX=36, NY=40 fire grid (double the runner's 18×20) over a
+# the build+solve path at a 2×-refined NX=36, NY=40 fire grid (double the runner's 18×20) over a
 # BOUNDED t_end window (default 30 s; override via argv). Emits, under ./profiles/:
 #   profile-python-top.txt   — self time by function (analog of the Rust/Julia -top)
 #   profile-python-tree.txt  — pyinstrument call tree (self + total time per frame)
@@ -142,15 +142,23 @@ PARAMS = {
 }
 
 
-def simulate(file, tend):
-    return esm.simulate(file, (0.0, tend), parameters=PARAMS, providers=PROVIDERS,
-                        method="RK45", rtol=1e-2, atol=1e-3)
+def run_once(file, tend):
+    """Build + solve, which is what the old one-shot `simulate` did in one call.
+
+    Kept as ONE function on purpose: this script profiles the whole path
+    (build-time regrid included), so splitting build from solve here would
+    change what is being measured.
+    """
+    return esm.solve(
+        esm.esm_problem(file, (0.0, tend), p=PARAMS, providers=PROVIDERS),
+        alg="RK45", reltol=1e-2, abstol=1e-3,
+    )
 
 
 print(f"loading    wildlandfire.esm  (NX={NX}, NY={NY})")
 
 # Warm up the toolkit import + parse on a throwaway load (sheds one-time first-touch
-# cost). We do NOT pre-run simulate() here — the build-time conservative regrid is the
+# cost). We do NOT pre-run the solve here — the build-time conservative regrid is the
 # workload we want IN the profile, not shed by a warmup, and the loader fetches warm
 # the cache on this first bind anyway.
 print("warming up (import + parse + loader fetch) … ", end="", flush=True)
@@ -167,11 +175,11 @@ print(f"profiling simulate (0.0, {t_end}) with RK45 … ", end="", flush=True)
 profiler = Profiler(interval=0.001)  # 1 ms sampling
 t0 = time.perf_counter()
 profiler.start()
-sim = simulate(file, t_end)
+sim = run_once(file, t_end)
 profiler.stop()
 tp = time.perf_counter() - t0
-print(f"done in {tp:.2f}s (success={sim.success})")
-if not sim.success:
+print(f"done in {tp:.2f}s (retcode={sim.retcode.name})")
+if sim.retcode is not esm.ReturnCode.Success:
     print(f"  WARNING: solver reported failure: {sim.message}", file=sys.stderr)
 
 session = profiler.last_session
@@ -185,7 +193,7 @@ header = (
 
 # --- Call tree (self + total per frame) — the rich view. ---------------------
 with open(os.path.join(outdir, "profile-python-tree.txt"), "w") as f:
-    f.write("# Python simulate() call tree (pyinstrument; self + total time)\n")
+    f.write("# Python esm_problem()+solve() call tree (pyinstrument; self + total time)\n")
     f.write(header + "\n")
     f.write(profiler.output_text(unicode=True, color=False, show_all=True))
 print("wrote profiles/profile-python-tree.txt")
@@ -223,7 +231,7 @@ except Exception as e:  # pragma: no cover — defensive across pyinstrument ver
 if self_by_func:
     ranked = sorted(self_by_func.items(), key=lambda kv: kv[1], reverse=True)
     with open(os.path.join(outdir, "profile-python-top.txt"), "w") as f:
-        f.write("# Python simulate() self-time by function\n")
+        f.write("# Python esm_problem()+solve() self-time by function\n")
         f.write(header)
         f.write("#  self%   self(s)  function\n")
         for name, secs in ranked[:40]:
