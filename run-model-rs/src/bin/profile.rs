@@ -1,4 +1,4 @@
-//! profile — CPU sampling profile of the Rust level-set simulate() (pprof-rs).
+//! profile — CPU sampling profile of the Rust level-set build+solve (pprof-rs).
 //!
 //! Loads and drives the SAME three-loader coupled model the runner uses
 //! (run-model-rs): the Rothermel + NFDRS behavior stack feeding the level-set
@@ -6,7 +6,7 @@
 //! onto the fire grid IN the .esm — 3DEP terrain, LANDFIRE fuel and ERA5 met. It
 //! binds those loaders as providers exactly like the runner (so the profile
 //! reflects the real coupled workload — the build-time conservative regrid is now a
-//! major cost, not the solve). Samples a single simulate() at the runner's
+//! major cost, not the solve). Samples a single build+solve at the runner's
 //! 2×-refined NX=36, NY=40 grid (double the runner's 18×20); t_end via env PROFILE_TEND (default 3600 s — the build
 //! dominates, so a shorter horizon still captures it). Emits, under ../profiles/:
 //!   flamegraph-rust.svg     — inclusive flame graph
@@ -23,7 +23,8 @@ use std::sync::Arc;
 
 use earthsci_ast::parse::load_path_with_options;
 use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
-use earthsci_ast::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
+use earthsci_ast::problem::{esm_problem, solve, ProblemOptions};
+use earthsci_ast::simulate::{Alg, SolveOptions};
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
 use ndarray::{ArrayD, Axis, IxDyn};
 
@@ -227,11 +228,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         [("NX".to_string(), NX), ("NY".to_string(), NY)].into_iter().collect();
     let file = load_path_with_options(model, &bindings).map_err(|e| format!("{model}: {e}"))?;
 
-    let opts = SimulateOptions {
-        solver: SolverChoice::Erk,
+    // phase 4: SciML option names — `alg` (was `solver`), `saveat` (was
+    // `output_times`). Kept deliberately loose (1e-2/1e-3): this is a profile.
+    let opts = SolveOptions {
+        alg: Alg::Erk,
         reltol: 1e-2,
         abstol: 1e-3,
-        output_times: Some(vec![0.0, t_end]),
+        saveat: Some(vec![0.0, t_end]),
         ..Default::default()
     };
 
@@ -241,11 +244,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .blocklist(&["libsystem", "libdyld", "libc"])
         .build()?;
 
-    eprintln!("profiling  simulate (0.0, {t_end}) with Erk …");
+    eprintln!("profiling  build+solve (0.0, {t_end}) with Erk …");
     let t0 = std::time::Instant::now();
-    let sol = simulate_with_providers_inspect(&file, (0.0, t_end), &params, &HashMap::new(), &opts, providers, None)?;
+    // Build AND solve inside the profiled region on purpose: this script
+    // profiles the whole path, and the build-time conservative regrid is a
+    // major part of what is being measured.
+    let prob = esm_problem(
+        &file,
+        (0.0, t_end),
+        ProblemOptions { p: params.clone(), providers, ..Default::default() },
+    )?;
+    let sol = solve(&prob, &opts)?;
     let wall = t0.elapsed().as_secs_f64();
-    eprintln!("simulate done in {wall:.1}s ({} snapshots)", sol.time.len());
+    eprintln!("build+solve done in {wall:.1}s ({} snapshots)", sol.time.len());
 
     let report = guard.report().build()?;
     let svg_path = format!("{outdir}/flamegraph-rust.svg");
@@ -268,7 +279,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut f = std::fs::File::create(&top_path)?;
     writeln!(
         f,
-        "# Rust simulate() self-time by leaf function\n\
+        "# Rust build+solve self-time by leaf function\n\
          # NX={NX} NY={NY}  t_end={t_end}  wall={wall:.1}s  solver=Erk (diffsol)\n\
          # three real loaders (3DEP + LANDFIRE + ERA5), regridded in-model\n\
          # {total} samples @ 997 Hz\n\

@@ -35,9 +35,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use earthsci_ast::parse::load_path_with_options;
+use earthsci_ast::error::MessageError;
 use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
-use earthsci_ast::simulate::{simulate_with_providers_inspect, SimulateOptions, SolverChoice};
-use earthsci_ast::simulate_array::BuildInspection;
+use earthsci_ast::problem::{esm_problem, solve, ProblemOptions};
+use earthsci_ast::simulate::{Alg, SolveOptions};
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
 use ndarray::{ArrayD, Axis, IxDyn};
 use plotters::prelude::*;
@@ -98,14 +99,14 @@ struct EioConstProvider(Provider);
 
 impl CadenceProvider for EioConstProvider {
     fn materialize(&mut self) -> Result<HashMap<String, NativeField>, ProviderError> {
-        let fields = self.0.materialize().map_err(|e| ProviderError(e.to_string()))?;
+        let fields = self.0.materialize().map_err(|e| MessageError(e.to_string()))?;
         let mut out = HashMap::with_capacity(fields.len());
         for (name, f) in fields {
             let arr = match f.data {
                 ArrayData::F64(v) => ArrayD::from_shape_vec(IxDyn(&f.shape), v)
-                    .map_err(|e| ProviderError(format!("{name}: {e}")))?,
+                    .map_err(|e| MessageError(format!("{name}: {e}")))?,
                 other => {
-                    return Err(ProviderError(format!(
+                    return Err(MessageError(format!(
                         "{name}: expected an f64 raster band, got {:?}",
                         other.dtype()
                     )))
@@ -365,13 +366,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Erk (explicit Tsitouras 5(4)) — the SAME method as Julia's Tsit5. The
     // level-set Godunov Hamiltonian is hyperbolic, not stiff, so an adaptive
     // explicit RK is the natural choice.
-    let opts = SimulateOptions {
-        solver: SolverChoice::Erk,
+    // EarthSciAST phase 4: SciML option names — `alg` (was `solver`), `saveat`
+    // (was `output_times`). The tolerances stay explicit: the library defaults
+    // are now 1e-4/1e-6 and this run needs its own abstol.
+    let opts = SolveOptions {
+        alg: Alg::Erk,
         // reltol=1e-4 (was 1e-2): exact (uncapped) Rothermel spread is stiff on steep
         // terrain; 1e-2 under-resolves it. 1e-4 is converged (rtol=1e-5 matches).
         reltol: 1e-4,
         abstol: 1e-5,
-        output_times: Some(times.clone()),
+        saveat: Some(times.clone()),
         ..Default::default()
     };
     // Extent + scalar forcing for the coupled behavior stack. R_0 comes from
@@ -401,16 +405,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("simulating (0.0, {t_end}) with Erk, {NT} snapshots …");
     // `inspect` captures the build-once geometry so we can read the terrain the
     // model actually used (TerrainRegrid.elev_xy) straight out of the run.
-    let mut insp = BuildInspection::default();
-    let sol = simulate_with_providers_inspect(
+    // phase 4: build once, then solve. `inspect` and `providers` are BUILD
+    // concerns and move to construction; the inspection is read back off the
+    // problem instead of being threaded in through a `&mut` out-parameter.
+    let prob = esm_problem(
         &file,
         (0.0, t_end),
-        &params,
-        &HashMap::new(),
-        &opts,
-        providers,
-        Some(&mut insp),
+        ProblemOptions {
+            p: params.clone(),
+            providers,
+            inspect: true,
+            ..Default::default()
+        },
     )?;
+    let sol = solve(&prob, &opts)?;
+    let insp = prob.take_inspection();
 
     // Assemble the primary 2-D field: elements "<stem>[i,j]", grouped by stem.
     let mut groups: BTreeMapAlias = BTreeMapAlias::new();
@@ -449,7 +458,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let cell_area = dx * dy;
-    println!("\nsolver: {} ; field '{stem}' is {nx}×{ny}", sol.metadata.solver);
+    println!("\nsolver: {} ; field '{stem}' is {nx}×{ny}", sol.metadata.alg);
     for k in 0..nt {
         let mut n = 0usize;
         let mut sx = 0.0;
@@ -512,7 +521,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .join("front_rust.png");
     plot(
         &plot_path,
-        &format!("{model_name} — front {{{stem}=0}}: 3DEP terrain + LANDFIRE fuel + ERA5 wind, Rust / {}", sol.metadata.solver),
+        &format!("{model_name} — front {{{stem}=0}}: 3DEP terrain + LANDFIRE fuel + ERA5 wind, Rust / {}", sol.metadata.alg),
         &xs,
         &ys,
         &psi,
