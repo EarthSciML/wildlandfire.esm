@@ -207,7 +207,7 @@ regrid_geom = Dict(
     "Era5Regrid.tgt_dx" => dxf, "Era5Regrid.tgt_dy" => dyf)
 
 println("loading    $model_path  (NX=$NX, NY=$NY)")
-file = ESS.load(model_path; metaparameters = Dict("NX" => NX, "NY" => NY))
+file = ESS.load_path(model_path; metaparameters = Dict("NX" => NX, "NY" => NY))
 
 ts = collect(range(0.0, t_end; length = NT))
 println("simulating (0.0, $t_end) with Tsit5, $NT snapshots …")

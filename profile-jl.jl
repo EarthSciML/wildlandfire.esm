@@ -122,7 +122,7 @@ sim_once(tend) = ESS.simulate(file, (0.0, tend); alg=alg, providers=providers,
                               parameters=params, reltol=1e-2, abstol=1e-3)
 
 println("loading    wildlandfire.esm  (NX=$NX, NY=$NY)")
-file = ESS.load(joinpath(HERE, "wildlandfire.esm"); metaparameters=Dict("NX"=>NX, "NY"=>NY))
+file = ESS.load_path(joinpath(HERE, "wildlandfire.esm"); metaparameters=Dict("NX"=>NX, "NY"=>NY))
 
 # Warm up: force JIT compilation of the whole simulate path (incl. the build-time
 # regrid) so the profile shows steady-state runtime, not one-shot compilation. This

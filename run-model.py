@@ -262,7 +262,7 @@ regrid_geom = {
 }
 
 print(f"loading    {model_path}  (NX={NX}, NY={NY})")
-file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
+file = esm.load_path(model_path, metaparameters={"NX": NX, "NY": NY})
 
 # RK45 (explicit Dormand-Prince 5(4)) — the SciPy analog of Julia's Tsit5 / Rust's
 # Erk. The level-set Godunov Hamiltonian is hyperbolic (non-stiff), so an adaptive

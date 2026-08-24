@@ -155,13 +155,13 @@ print(f"loading    wildlandfire.esm  (NX={NX}, NY={NY})")
 # the cache on this first bind anyway.
 print("warming up (import + parse + loader fetch) … ", end="", flush=True)
 tw = time.perf_counter()
-_ = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
+_ = esm.load_path(model_path, metaparameters={"NX": NX, "NY": NY})
 for p in PROVIDERS.values():
     p.materialize()   # warm the cache (network) so the profiled run reads it locally
 tw = time.perf_counter() - tw
 print(f"done in {tw:.1f}s")
 
-file = esm.load(model_path, metaparameters={"NX": NX, "NY": NY})
+file = esm.load_path(model_path, metaparameters={"NX": NX, "NY": NY})
 
 print(f"profiling simulate (0.0, {t_end}) with RK45 … ", end="", flush=True)
 profiler = Profiler(interval=0.001)  # 1 ms sampling
