@@ -21,10 +21,9 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
-use earthsci_ast::parse::load_path_with_options;
+use earthsci_ast::extension::error::MessageError;
 use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
-use earthsci_ast::problem::{esm_problem, solve, ProblemOptions};
-use earthsci_ast::simulate::{Alg, SolveOptions};
+use earthsci_ast::{esm_problem, load_path_with_options, solve, Alg, ProblemOptions, SolveOptions};
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
 use ndarray::{ArrayD, Axis, IxDyn};
 
@@ -51,14 +50,14 @@ struct EioConstProvider(Provider);
 
 impl CadenceProvider for EioConstProvider {
     fn materialize(&mut self) -> Result<HashMap<String, NativeField>, ProviderError> {
-        let fields = self.0.materialize().map_err(|e| ProviderError(e.to_string()))?;
+        let fields = self.0.materialize().map_err(|e| MessageError(e.to_string()))?;
         let mut out = HashMap::with_capacity(fields.len());
         for (name, f) in fields {
             let arr = match f.data {
                 ArrayData::F64(v) => ArrayD::from_shape_vec(IxDyn(&f.shape), v)
-                    .map_err(|e| ProviderError(format!("{name}: {e}")))?,
+                    .map_err(|e| MessageError(format!("{name}: {e}")))?,
                 other => {
-                    return Err(ProviderError(format!(
+                    return Err(MessageError(format!(
                         "{name}: expected an f64 raster band, got {:?}",
                         other.dtype()
                     )))
