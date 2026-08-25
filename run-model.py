@@ -74,7 +74,7 @@ import earthsciio as esio        # EarthSciIO provides the ESS provider seam via
 
 # --- diagnostic solver knobs (env-gated; defaults reproduce the standard run) ---
 # ESS_RTOL / ESS_ATOL override the RK45 tolerances. ESS_MAXSTEP caps the solver step
-# (a CFL-style cap); esm.simulate does not expose max_step, so we inject it into every
+# (a CFL-style cap); esm.solve does not expose max_step, so we inject it into every
 # already-imported scipy solve_ivp call site. ESS_TAG suffixes the output PNG so
 # stability experiments don't overwrite each other.
 # rtol=1e-4 (was 1e-2): with the exact (uncapped) Rothermel spread rate the front
