@@ -34,11 +34,9 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use earthsci_ast::parse::load_path_with_options;
-use earthsci_ast::error::MessageError;
+use earthsci_ast::extension::error::MessageError;
 use earthsci_ast::provider::{CadenceProvider, NativeField, ProviderError};
-use earthsci_ast::problem::{esm_problem, solve, ProblemOptions};
-use earthsci_ast::simulate::{Alg, SolveOptions};
+use earthsci_ast::{esm_problem, load_path_with_options, solve, Alg, ProblemOptions, SolveOptions};
 use earthsciio::{ArrayData, Cache, DataLoader, Provider};
 use ndarray::{ArrayD, Axis, IxDyn};
 use plotters::prelude::*;
